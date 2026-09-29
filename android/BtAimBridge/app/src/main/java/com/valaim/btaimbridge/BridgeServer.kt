@@ -27,8 +27,6 @@ class BridgeServer(
     private var worker: Thread? = null
 
     @Volatile private var buttonMask = 0
-    private var mvCount = 0
-    private var okCount = 0
 
     fun start() {
         if (running) return
@@ -92,14 +90,9 @@ class BridgeServer(
                 while (rx != 0 || ry != 0) {
                     val sx = rx.coerceIn(-127, 127)
                     val sy = ry.coerceIn(-127, 127)
-                    val ok = hid.sendReport(buttonMask, sx, sy, 0)
-                    if (ok) okCount++
-                    mvCount++
+                    hid.sendReport(buttonMask, sx, sy, 0)
                     rx -= sx
                     ry -= sy
-                }
-                if (mvCount % 20 == 0) {
-                    onLog("got $mvCount moves, $okCount sent ok")
                 }
             }
             "B" -> {

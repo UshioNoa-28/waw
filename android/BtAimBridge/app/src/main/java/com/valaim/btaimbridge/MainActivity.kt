@@ -3,19 +3,17 @@ package com.valaim.btaimbridge
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
-import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.text.format.Formatter
-import android.view.MotionEvent
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -23,6 +21,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 
+@SuppressLint("SetTextI18n")
 class MainActivity : AppCompatActivity() {
 
     companion object {
@@ -33,28 +32,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var prefs: SharedPreferences
-    private var service: BridgeService? = null
-    private var bound = false
+    private lateinit var hid: HidMouseController
+    private var server: BridgeServer? = null
+    private val main = Handler(Looper.getMainLooper())
+    private var running = false
 
     private lateinit var tvIp: TextView
     private lateinit var tvStatus: TextView
     private lateinit var etPort: EditText
     private lateinit var btnToggle: Button
-
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            val b = binder as? BridgeService.LocalBinder ?: return
-            service = b.service()
-            bound = true
-            service?.setStatusCallback { s -> runOnUiThread { tvStatus.text = s } }
-            if (service?.hid != null) tvStatus.text = "Service running"
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            service = null
-            bound = false
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,8 +55,10 @@ class MainActivity : AppCompatActivity() {
         etPort.setText(prefs.getInt(KEY_PORT, DEFAULT_PORT).toString())
         tvIp.text = "PC IP: ${localIp()}"
 
+        hid = HidMouseController(this) { msg -> setStatus(msg) }
+
         btnToggle.setOnClickListener {
-            if (service?.hid != null) stopAll() else requestThenStart()
+            if (running) stopAll() else requestThenStart()
         }
         findViewById<Button>(R.id.btnDiscover).setOnClickListener { makeDiscoverable() }
         findViewById<Button>(R.id.btnRefresh).setOnClickListener {
@@ -78,33 +66,34 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupTouchpad()
-        bindService(Intent(this, BridgeService::class.java), connection, Context.BIND_AUTO_CREATE)
     }
 
     private fun setupTouchpad() {
-        val pad = findViewById<View>(R.id.touchpad)
+        val pad = findViewById<android.view.View>(R.id.touchpad)
         var lastX = 0f
         var lastY = 0f
         pad.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
+                android.view.MotionEvent.ACTION_DOWN -> {
                     lastX = ev.x
                     lastY = ev.y
                 }
-                MotionEvent.ACTION_MOVE -> {
+                android.view.MotionEvent.ACTION_MOVE -> {
                     val dx = (ev.x - lastX).toInt()
                     val dy = (ev.y - lastY).toInt()
                     lastX = ev.x
                     lastY = ev.y
                     if (dx != 0 || dy != 0) {
-                        val ok = service?.sendMove(dx, dy) ?: false
-                        if (!ok) tvStatus.text = "touchpad: HID not connected"
+                        val ok = hid.sendReport(0, dx, dy, 0)
+                        if (!ok) setStatus("touchpad: HID not connected")
                     }
                 }
             }
             true
         }
     }
+
+    private fun setStatus(s: String) = main.post { tvStatus.text = s }
 
     private fun requestThenStart() {
         val need = mutableListOf<String>()
@@ -115,10 +104,14 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             need += Manifest.permission.POST_NOTIFICATIONS
         }
-        val missing = need.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        val missing = need.filter {
+            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+        }
         if (missing.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_PERMS)
-        } else startAll()
+        } else {
+            startAll()
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -128,7 +121,9 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == REQ_PERMS) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                 startAll()
-            } else tvStatus.text = "Permission denied"
+            } else {
+                setStatus("Permission denied - needed for Bluetooth")
+            }
         }
     }
 
@@ -141,18 +136,28 @@ class MainActivity : AppCompatActivity() {
         val port = etPort.text.toString().toIntOrNull() ?: DEFAULT_PORT
         prefs.edit().putInt(KEY_PORT, port).apply()
 
-        val intent = Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_START)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-        else startService(intent)
+        setStatus("Registering HID...")
+        hid.register()
 
+        server = BridgeServer(
+            portProvider = { prefs.getInt(KEY_PORT, DEFAULT_PORT) },
+            hid = hid,
+            onLog = { msg -> setStatus(msg) },
+            onClient = { ip -> setStatus("PC connected from $ip") },
+        ).also { it.start() }
+
+        running = true
         btnToggle.text = "STOP"
-        tvStatus.text = "Starting service..."
+        setStatus("Started. Now pair \"BtAimBridge\" on the PC.")
     }
 
     private fun stopAll() {
-        val intent = Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_STOP)
-        startService(intent)
+        server?.stop()
+        server = null
+        hid.unregister()
+        running = false
         btnToggle.text = "START"
+        setStatus("Stopped")
     }
 
     @SuppressLint("MissingPermission")
@@ -167,30 +172,28 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Grant Nearby devices permission first", Toast.LENGTH_SHORT).show()
             return
         }
+        val intent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
+            putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
+        }
         try {
-            startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
-                putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
-            })
-        } catch (_: Exception) {}
+            startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Could not open discoverable dialog", Toast.LENGTH_SHORT).show()
+        }
+        setStatus("Discoverable for 5 minutes - pair from the PC now")
     }
 
-    @Suppress("DEPRECATION")
-    private fun localIp(): String {
-        return try {
-            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val ip = wm.connectionInfo.ipAddress
-            if (ip == 0) "no wifi" else Formatter.formatIpAddress(ip).toString()
-        } catch (e: Exception) {
-            "unknown"
-        }
+    private fun localIp(): String = try {
+        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        @Suppress("DEPRECATION")
+        val ip = wm.connectionInfo.ipAddress
+        if (ip == 0) "no wifi" else Formatter.formatIpAddress(ip)
+    } catch (_: Exception) {
+        "unknown"
     }
 
     override fun onDestroy() {
-        if (bound) {
-            service?.setStatusCallback(null)
-            unbindService(connection)
-            bound = false
-        }
+        stopAll()
         super.onDestroy()
     }
 }
