@@ -38,14 +38,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--iou", type=float, default=0.45)
     p.add_argument("--classes", nargs="*", default=[])
     p.add_argument("--exclude-classes", nargs="*", default=[])
-    p.add_argument("--fov", type=int, default=250)
+    p.add_argument("--fov", type=int, default=500)
     p.add_argument("--aim-height", type=float, default=0.30)
     p.add_argument("--aim-mode", default="head", choices=["head", "head_wide", "body"])
     p.add_argument("--head-height", type=float, default=0.10)
     p.add_argument("--head-width", type=float, default=0.16)
     p.add_argument("--move-fraction", type=float, default=0.65)
     p.add_argument("--max-step", type=int, default=120)
-    p.add_argument("--key", default="F8")
+    p.add_argument("--key", default="", help="Hold this key to aim (default: always on)")
+    p.add_argument("--fps", type=int, default=60, help="Cap the aim loop at this FPS (0 = unlimited)")
     p.add_argument("--triggerbot", action="store_true")
     p.add_argument("--trigger-radius", type=int, default=80)
     p.add_argument("--input-backend", default="auto", choices=["auto", "bt", "sendinput"])
@@ -247,10 +248,12 @@ def run(cfg: AimConfig) -> None:
         if cfg.max_frames and frames >= cfg.max_frames:
             break
 
+        frame_start = time.monotonic()
         img, crop_x, crop_y, crop_w, crop_h = capture.grab()
         detections = detector.detect(img, crop_x, crop_y)
         cursor = capture.crosshair()
-        active = press_key(cfg.keybind)
+        # Always-on by default; pass --key to gate on a held key instead.
+        active = press_key(cfg.keybind) if cfg.keybind else True
         target = selector.select(detections, cursor) if active else None
         dist = None
         action = ""
@@ -274,7 +277,7 @@ def run(cfg: AimConfig) -> None:
             status = selector.explain(detections, cursor)
             if action:
                 status = f"{status} | {action}"
-        else:
+        elif cfg.keybind:
             ks = key_state(cfg.keybind)
             if ks == -1:
                 key_txt = "key polling disabled (not running on Windows)"
@@ -283,6 +286,8 @@ def run(cfg: AimConfig) -> None:
             else:
                 key_txt = f"{cfg.keybind} not pressed (state=0x{ks:04X})"
             status = f"idle | {key_txt} | detections={len(detections)}"
+        else:
+            status = f"idle | detections={len(detections)}"
 
         now = time.monotonic()
         if status != last_status or now - last_log_time >= 1.0:
@@ -303,7 +308,13 @@ def run(cfg: AimConfig) -> None:
                 break
 
         frames += 1
-        time.sleep(cfg.frame_sleep)
+        if cfg.fps > 0:
+            elapsed = time.monotonic() - frame_start
+            target_dt = 1.0 / cfg.fps
+            if elapsed < target_dt:
+                time.sleep(target_dt - elapsed)
+        else:
+            time.sleep(cfg.frame_sleep)
 
     if cfg.max_frames:
         print(f"Done: {frames} frames")
