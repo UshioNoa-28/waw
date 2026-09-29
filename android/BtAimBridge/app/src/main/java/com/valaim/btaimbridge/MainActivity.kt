@@ -1,17 +1,17 @@
 package com.valaim.btaimbridge
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.text.format.Formatter
 import android.widget.Button
@@ -21,89 +21,69 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 
+@SuppressLint("SetTextI18n")
 class MainActivity : AppCompatActivity() {
 
     companion object {
         const val PREFS = "btaimbridge"
         const val KEY_PORT = "port"
         const val DEFAULT_PORT = 47800
-        private const val REQ_BT = 1
-        private const val REQ_NOTIF = 2
+        private const val REQ_PERMS = 1
     }
 
     private lateinit var prefs: SharedPreferences
-    private lateinit var statusView: TextView
-    private lateinit var ipView: TextView
-    private lateinit var portView: EditText
+    private lateinit var hid: HidMouseController
+    private var server: BridgeServer? = null
+    private val main = Handler(Looper.getMainLooper())
     private var running = false
 
-    private val statusReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val s = intent.getStringExtra(BridgeService.EXTRA_STATUS) ?: return
-            statusView.text = s
-        }
-    }
+    private lateinit var tvIp: TextView
+    private lateinit var tvStatus: TextView
+    private lateinit var etPort: EditText
+    private lateinit var btnToggle: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        statusView = findViewById(R.id.status)
-        ipView = findViewById(R.id.ip)
-        portView = findViewById(R.id.port)
+        tvIp = findViewById(R.id.tvIp)
+        tvStatus = findViewById(R.id.tvStatus)
+        etPort = findViewById(R.id.etPort)
+        btnToggle = findViewById(R.id.btnToggle)
 
-        portView.setText(prefs.getInt(KEY_PORT, DEFAULT_PORT).toString())
-        ipView.text = getLocalIp()
+        etPort.setText(prefs.getInt(KEY_PORT, DEFAULT_PORT).toString())
+        tvIp.text = "PC IP: ${localIp()}"
 
-        findViewById<Button>(R.id.btnStart).setOnClickListener {
-            val port = portView.text.toString().toIntOrNull() ?: DEFAULT_PORT
-            prefs.edit().putInt(KEY_PORT, port).apply()
-            requestPermissionsThenStart()
-        }
-        findViewById<Button>(R.id.btnStop).setOnClickListener {
-            stopBridge()
-        }
-        findViewById<Button>(R.id.btnBattery).setOnClickListener {
-            openBatterySettings()
-        }
-        findViewById<Button>(R.id.btnRefreshIp).setOnClickListener {
-            ipView.text = getLocalIp()
-        }
+        hid = HidMouseController(this) { msg -> setStatus(msg) }
 
-        requestNotifPermission()
+        btnToggle.setOnClickListener {
+            if (running) stopAll() else requestThenStart()
+        }
+        findViewById<Button>(R.id.btnDiscover).setOnClickListener { makeDiscoverable() }
+        findViewById<Button>(R.id.btnRefresh).setOnClickListener {
+            tvIp.text = "PC IP: ${localIp()}"
+        }
     }
 
-    override fun onResume() {
-        super.onResume()
-        val filter = IntentFilter(BridgeService.ACTION_STATUS)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            registerReceiver(statusReceiver, filter)
-        }
-        ipView.text = getLocalIp()
-    }
+    private fun setStatus(s: String) = main.post { tvStatus.text = s }
 
-    override fun onPause() {
-        super.onPause()
-        try { unregisterReceiver(statusReceiver) } catch (_: Exception) {}
-    }
-
-    private fun requestPermissionsThenStart() {
-        val needed = mutableListOf<String>()
+    private fun requestThenStart() {
+        val need = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            needed += Manifest.permission.BLUETOOTH_CONNECT
-            needed += Manifest.permission.BLUETOOTH_SCAN
+            need += Manifest.permission.BLUETOOTH_CONNECT
+            need += Manifest.permission.BLUETOOTH_SCAN
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            needed += Manifest.permission.POST_NOTIFICATIONS
+            need += Manifest.permission.POST_NOTIFICATIONS
         }
-        if (needed.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, needed.toTypedArray(), REQ_BT)
+        val missing = need.filter {
+            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_PERMS)
         } else {
-            startBridge()
+            startAll()
         }
     }
 
@@ -111,65 +91,82 @@ class MainActivity : AppCompatActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_BT) {
-            val btOk = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-            if (btOk) startBridge()
-            else {
-                Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_LONG).show()
-                statusView.text = "Permission denied"
+        if (requestCode == REQ_PERMS) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                startAll()
+            } else {
+                setStatus("Permission denied - needed for Bluetooth")
             }
         }
     }
 
-    private fun startBridge() {
+    private fun startAll() {
         val adapter = BluetoothAdapter.getDefaultAdapter()
         if (adapter == null || !adapter.isEnabled) {
-            Toast.makeText(this, "Turn Bluetooth on first", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Turn Bluetooth ON first", Toast.LENGTH_LONG).show()
             return
         }
-        val intent = Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_START)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-        else startService(intent)
+        val port = etPort.text.toString().toIntOrNull() ?: DEFAULT_PORT
+        prefs.edit().putInt(KEY_PORT, port).apply()
+
+        setStatus("Registering HID...")
+        hid.register()
+
+        server = BridgeServer(
+            portProvider = { prefs.getInt(KEY_PORT, DEFAULT_PORT) },
+            hid = hid,
+            onLog = { msg -> setStatus(msg) },
+            onClient = { ip -> setStatus("PC connected from $ip") },
+        ).also { it.start() }
+
         running = true
-        statusView.text = "Starting bridge..."
+        btnToggle.text = "STOP"
+        setStatus("Started. Now pair \"BtAimBridge\" on the PC.")
     }
 
-    private fun stopBridge() {
-        val intent = Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_STOP)
-        startService(intent)
+    private fun stopAll() {
+        server?.stop()
+        server = null
+        hid.unregister()
         running = false
-        statusView.text = "Stopped"
+        btnToggle.text = "START"
+        setStatus("Stopped")
     }
 
-    private fun requestNotifPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF
-            )
+    @SuppressLint("MissingPermission")
+    private fun makeDiscoverable() {
+        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+        if (!adapter.isEnabled) {
+            Toast.makeText(this, "Turn Bluetooth ON first", Toast.LENGTH_SHORT).show()
+            return
         }
-    }
-
-    private fun openBatterySettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "Grant Nearby devices permission first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
+            putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
+        }
         try {
-            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
             startActivity(intent)
         } catch (_: Exception) {
-            Toast.makeText(this, "Open Settings > Apps > BtAimBridge > Battery > Unrestricted",
-                Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Could not open discoverable dialog", Toast.LENGTH_SHORT).show()
         }
+        setStatus("Discoverable for 5 minutes - pair from the PC now")
     }
 
-    private fun getLocalIp(): String {
-        return try {
-            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            @Suppress("DEPRECATION")
-            val ip = wm.connectionInfo.ipAddress
-            if (ip == 0) "No WiFi" else Formatter.formatIpAddress(ip)
-        } catch (_: Exception) {
-            "Unknown"
-        }
+    private fun localIp(): String = try {
+        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        @Suppress("DEPRECATION")
+        val ip = wm.connectionInfo.ipAddress
+        if (ip == 0) "no wifi" else Formatter.formatIpAddress(ip)
+    } catch (_: Exception) {
+        "unknown"
+    }
+
+    override fun onDestroy() {
+        stopAll()
+        super.onDestroy()
     }
 }

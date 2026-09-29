@@ -1,103 +1,109 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="20dp">
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="BtAimBridge"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:paddingBottom="12dp" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="PC address (use this in the aim tool)"
-        android:textSize="13sp" />
-
-    <TextView
-        android:id="@+id/ip"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="0.0.0.0"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:textColor="#1a73e8"
-        android:paddingBottom="8dp" />
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:orientation="vertical"
+        android:padding="24dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="TCP port:  "
-            android:textSize="15sp" />
+            android:text="BtAimBridge"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:paddingBottom="4dp" />
 
-        <EditText
-            android:id="@+id/port"
-            android:layout_width="140dp"
-            android:layout_height="wrap_content"
-            android:inputType="number"
-            android:text="47800"
-            android:textSize="15sp" />
-
-        <Button
-            android:id="@+id/btnRefreshIp"
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Refresh IP" />
-    </LinearLayout>
+            android:text="Turn this phone into a Bluetooth mouse for ValAim"
+            android:textSize="13sp"
+            android:alpha="0.7"
+            android:paddingBottom="24dp" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp">
+        <TextView
+            android:id="@+id/tvIp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="PC IP: ..."
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#1565C0"
+            android:paddingBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Type this IP into the aim tool on the PC"
+            android:textSize="12sp"
+            android:alpha="0.6"
+            android:paddingBottom="20dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingBottom="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="TCP port"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/etPort"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:inputType="number"
+                android:text="47800"
+                android:textSize="15sp" />
+
+            <Button
+                android:id="@+id/btnRefresh"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Refresh" />
+        </LinearLayout>
 
         <Button
-            android:id="@+id/btnStart"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:id="@+id/btnToggle"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
             android:text="START"
+            android:textSize="18sp"
             android:textStyle="bold" />
 
         <Button
-            android:id="@+id/btnStop"
-            android:layout_width="0dp"
+            android:id="@+id/btnDiscover"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="STOP" />
+            android:layout_marginTop="12dp"
+            android:text="Make discoverable (for pairing)" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Idle"
+            android:textSize="15sp"
+            android:paddingTop="24dp"
+            android:paddingBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:alpha="0.7"
+            android:text="How to use&#10;1. Tap START, allow Bluetooth.&#10;2. Tap Make discoverable.&#10;3. On the PC: Bluetooth &gt; Add device &gt; BtAimBridge.&#10;4. Status should say CONNECTED.&#10;5. Run the aim tool with --bt-host &lt;the IP above&gt;.&#10;&#10;Keep this screen open. Set battery to Unrestricted." />
+
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Idle"
-        android:textSize="14sp"
-        android:paddingBottom="16dp" />
-
-    <Button
-        android:id="@+id/btnBattery"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Open battery settings (set Unrestricted)" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingTop="16dp"
-        android:textSize="12sp"
-        android:text="Setup:\n1. Turn on Bluetooth.\n2. Tap START.\n3. In Windows: Settings > Bluetooth > Add device > find &quot;BtAimBridge&quot; and pair it.\n4. Start the aim tool on the PC with --input-backend bt --bt-host &lt;the IP above&gt;.\n\nKeep this app in the foreground. Set battery to Unrestricted." />
-
-</LinearLayout>
+</ScrollView>
