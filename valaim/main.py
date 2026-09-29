@@ -48,8 +48,8 @@ def parse_args() -> argparse.Namespace:
                    help="Vertical aim point inside a head box (0=top, 1=bottom; default 0.55)")
     p.add_argument("--move-fraction", type=float, default=0.65)
     p.add_argument("--max-step", type=int, default=120)
-    p.add_argument("--key", default="", help="Hold this key to aim (default: none)")
-    p.add_argument("--hold-button", default="left",
+    p.add_argument("--key", default="ALT", help="Hold this key to aim (default: ALT)")
+    p.add_argument("--hold-button", default="none",
                    choices=["none", "left", "right", "middle", "x1", "x2"],
                    help="Aim only while this mouse button is held (default: left)")
     p.add_argument("--fps", type=int, default=60, help="Cap the aim loop at this FPS (0 = unlimited)")
@@ -260,11 +260,12 @@ def run(cfg: AimConfig) -> None:
         img, crop_x, crop_y, crop_w, crop_h = capture.grab()
         detections = detector.detect(img, crop_x, crop_y)
         cursor = capture.crosshair()
-        # Aim only while the hold button is pressed (left mouse by default).
-        if cfg.hold_button:
-            active = mouse_button_down(cfg.hold_button)
-        elif cfg.keybind:
+        # Aim only while the trigger key/button is held. Keyboard keys are
+        # reliable; mouse buttons are often swallowed by the game's raw input.
+        if cfg.keybind:
             active = press_key(cfg.keybind)
+        elif cfg.hold_button:
+            active = mouse_button_down(cfg.hold_button)
         else:
             active = True
         target = selector.select(detections, cursor) if active else None

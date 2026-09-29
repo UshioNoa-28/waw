@@ -30,8 +30,8 @@ class AimConfig:
     move_fraction: float = 0.65
     max_step: int = 120
 
-    keybind: str = ""
-    hold_button: str = "left"
+    keybind: str = "ALT"
+    hold_button: str = ""
     triggerbot: bool = False
     trigger_radius: int = 80
 

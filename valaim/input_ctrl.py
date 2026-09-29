@@ -43,7 +43,7 @@ if sys.platform == "win32":
         "SPACE": 0x20,
         "LSHIFT": 0xA0, "RSHIFT": 0xA1,
         "LCTRL": 0xA2, "RCTRL": 0xA3,
-        "LALT": 0xA4, "RALT": 0xA5,
+        "LALT": 0xA4, "RALT": 0xA5, "ALT": 0xA4,
         "TAB": 0x09, "ENTER": 0x0D,
     }
     for code, name in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x41):
