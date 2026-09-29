@@ -18,12 +18,13 @@ REM Check the usual Visual Studio 2022 install locations first.  vswhere is
 REM only a fallback, because it happily returns unrelated MSBuild copies
 REM (e.g. the one bundled with SQL Server Management Studio).
 set "MSBUILD="
+set "PF86=%ProgramFiles(x86)%"
 
 for %%p in (
     "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\amd64\MSBuild.exe"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\amd64\MSBuild.exe"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe"
-    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.exe"
+    "%PF86%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.exe"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
@@ -33,39 +34,17 @@ for %%p in (
 
 if not defined MSBUILD (
     echo [!] Could not find Visual Studio 2022 MSBuild in the usual locations.
-    echo     Checked:
-    echo       %ProgramFiles%\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
     echo     Install VS2022 with the "Desktop development with C++" workload.
     exit /b 1
 )
 echo [*] MSBuild: %MSBUILD%
 
 REM ---- locate WDK -----------------------------------------------------------
-set "WDK_INC=%ProgramFiles(x86)%\Windows Kits\10\Include"
-set "HAVE_WDK=0"
-if exist "%WDK_INC%" (
-    for /f "delims=" %%d in ('dir /b /ad /o-n "%WDK_INC%" 2^>nul') do (
-        if exist "%WDK_INC%\%%d\km\wdf.h" set "HAVE_WDK=1"
-    )
-)
-if not "%HAVE_WDK%"=="1" (
-    echo [!] Windows Driver Kit not found.
-    echo     Expected something like:
-    echo       %WDK_INC%\10.0.26100.0\km\wdf.h
-    echo.
-    echo     Install it from the Visual Studio Installer ^(easiest^):
-    echo       1. Open "Visual Studio Installer"
-    echo       2. Visual Studio 2022 Community -^> Modify
-    echo       3. "Individual components" tab -^> search "Windows Driver Kit"
-    echo       4. Check it -^> Modify
-    echo       5. Reboot, then run build.cmd again
-    echo.
-    echo     Or install just the WDK:
-    echo       winget install -e --id Microsoft.WindowsWDK.10.0.26100
-    echo       https://learn.microsoft.com/windows-hardware/drivers/download-the-wdk
-    echo.
-    exit /b 1
-)
+REM %ProgramFiles(x86)% contains "(x86)"; parentheses break cmd parsing inside
+REM if/for blocks, so we already normalised it into PF86 above.
+set "WDK_INC=%PF86%\Windows Kits\10\Include"
+call :check_wdk
+if not "%HAVE_WDK%"=="1" goto :no_wdk
 echo [*] WDK found.
 
 echo [*] Building vhidmouse.sys ...
@@ -85,4 +64,29 @@ echo [*] Built: %OUT%vhidmouse.sys
 echo.
 endlocal
 exit /b 0
+
+REM ---------------------------------------------------------------------------
+:check_wdk
+set "HAVE_WDK=0"
+if not exist "%WDK_INC%" goto :eof
+for /f "delims=" %%d in ('dir /b /ad /o-n "%WDK_INC%" 2^>nul') do (
+    if exist "%WDK_INC%\%%d\km\wdf.h" set "HAVE_WDK=1"
+)
+goto :eof
+
+:no_wdk
+echo [!] Windows Driver Kit not found.
+echo     Expected a file like:
+echo       %WDK_INC%\[version]\km\wdf.h
+echo.
+echo     Install it from the Visual Studio Installer:
+echo       1. Open "Visual Studio Installer"
+echo       2. Visual Studio 2022 Community -^> Modify
+echo       3. "Individual components" tab -^> search "Windows Driver Kit"
+echo       4. Check it -^> Modify, then reboot
+echo.
+echo     Or:  winget install -e --id Microsoft.WindowsWDK.10.0.26100
+echo     Docs: https://learn.microsoft.com/windows-hardware/drivers/download-the-wdk
+echo.
+exit /b 1
 
