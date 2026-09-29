@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+uv.lock
+models/
+*.tar.gz
+build.log
+dist/
+build/
+kernel/vhidmouse/build/
+android/BtAimBridge/.gradle/
+android/BtAimBridge/app/build/
+android/BtAimBridge/local.properties
+image.png
+opencode.json

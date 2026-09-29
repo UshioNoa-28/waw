@@ -1,0 +1,36 @@
+[project]
+name = "valaim"
+version = "0.1.0"
+description = "External Valorant aimbot using ONNX YOLO inference."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "mss",
+]
+
+[project.optional-dependencies]
+cpu = [
+    "onnxruntime",
+]
+
+cuda = [
+    "onnxruntime-gpu",
+]
+
+amd = [
+    "onnxruntime-directml",
+]
+
+export = [
+    "ultralytics",
+    "huggingface_hub",
+    "torch",
+]
+
+build = [
+    "pyinstaller",
+]
+
+[tool.uv]
+package = false

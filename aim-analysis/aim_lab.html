@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>AIM LAB — 人类甩枪 vs 算法瞄准 签名分析</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px 20px; background: #101014; color: #ccd; font-family: Consolas, "Courier New", monospace; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: #889; margin-bottom: 12px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .panel { background: #17171d; border: 1px solid #2a2a33; border-radius: 6px; padding: 10px; }
+  button { background: #2b5bd7; color: #fff; border: 0; border-radius: 4px; padding: 6px 14px; font-family: inherit; font-size: 13px; cursor: pointer; }
+  button:disabled { background: #444; cursor: default; }
+  button.alt { background: #333; border: 1px solid #556; }
+  #arena { background: #0a0a0e; border: 1px solid #2a2a33; border-radius: 6px; cursor: crosshair; }
+  #status { font-size: 13px; margin: 6px 0; min-height: 18px; color: #9fd08b; }
+  canvas.chart { background: #0d0d12; border: 1px solid #2a2a33; border-radius: 4px; }
+  table { border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #2a2a33; padding: 3px 8px; text-align: right; }
+  th { color: #99a; font-weight: normal; }
+  td:first-child, th:first-child { text-align: left; }
+  .hum { color: #7ec3ff; } .mac { color: #ff9f6e; }
+  label { font-size: 12px; color: #99a; margin-right: 4px; }
+  input[type=number] { width: 62px; background: #0d0d12; color: #ccd; border: 1px solid #2a2a33; border-radius: 3px; padding: 3px 6px; font-family: inherit; }
+  .group { display: inline-block; margin-right: 14px; }
+</style>
+</head>
+<body>
+<h1>AIM LAB <span style="color:#667">— 人类甩枪 vs 算法瞄准 签名分析</span></h1>
+<div class="sub">左：按空格生成目标,像打游戏一样最快甩过去点掉。右：纯公式合成机器瞄准轨迹 (d(n)=d·0.65ⁿ, 来自外挂源码的数学, 不需要运行它)。建议用 Chrome/Edge, 可用 pointerrawupdate 以鼠标原始回报率采样。</div>
+
+<div class="row">
+  <div class="panel">
+    <div>
+      <div id="status">按 [空格] 或 [开始回合] 记录你的第一枪</div>
+      <canvas id="arena" width="720" height="560"></canvas>
+    </div>
+    <div style="margin-top:8px">
+      <button id="btnTrial">开始回合</button>
+      <button id="btnFinish" class="alt">结束并统计</button>
+      <button id="btnMachine" class="alt">生成机器基线 ×12</button>
+      <button id="btnExport" class="alt">导出 CSV/JSON</button>
+    </div>
+    <div style="margin-top:8px">
+      <span class="group"><label>甩枪距离</label><input type="number" id="minDist" value="120"> ~ <input type="number" id="maxDist" value="380"> px</span>
+      <span class="group"><label>机器 fps</label><input type="number" id="machFps" value="125"></span>
+      <span class="group"><label>move_fraction</label><input type="number" id="mfrac" value="0.65" step="0.05"></span>
+    </div>
+  </div>
+
+  <div class="panel" style="max-width:760px">
+    <div class="sub" style="margin:0 0 6px">判据表 (人类 = 你刚才录的; 机器 = 公式合成)</div>
+    <table id="stats"><thead><tr>
+      <th>样本</th><th>时长 ms</th><th>路径直线比</th><th>方向反转</th><th>采样间隔抖动 σms</th><th>指数衰减 R²</th><th>峰值速度 px/ms</th>
+    </tr></thead><tbody></tbody></table>
+    <div class="sub" style="margin:10px 0 4px">距离→时间 (对数轴; 直线=指数收敛=机器特征)</div>
+    <canvas id="cLog" class="chart" width="740" height="220"></canvas>
+    <div class="sub" style="margin:10px 0 4px">轨迹路径 (归一化: 起点→终点)</div>
+    <canvas id="cPath" class="chart" width="740" height="300"></canvas>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const arena = $("arena"), actx = arena.getContext("2d");
+const T = { R: 18, MARGIN: 40 };
+
+let human = [];           // finished trials: {samples:[{t,x,y}], spawn, click, dt0}
+let machine = [];         // same shape, synthesized
+let trial = null;         // in-progress trial
+let t0Global = performance.now();
+
+/* ---------- rendering ---------- */
+function draw() {
+  actx.clearRect(0, 0, arena.width, arena.height);
+  actx.fillStyle = "#667"; actx.font = "12px Consolas";
+  actx.fillText("human = blue, machine baseline = orange (synthetic)", 10, arena.height - 10);
+  if (trial) {
+    actx.strokeStyle = "#3a3a4a";
+    actx.beginPath(); actx.arc(trial.spawn.x, trial.spawn.y, 60, 0, 7); actx.stroke();
+    actx.fillStyle = "#e34040";
+    actx.beginPath(); actx.arc(trial.spawn.x, trial.spawn.y, T.R, 0, 7); actx.fill();
+    const last = trial.samples[trial.samples.length - 1];
+    if (last) { actx.fillStyle = "#7ec3ff";
+      actx.beginPath(); actx.arc(last.x, last.y, 4, 0, 7); actx.fill(); }
+    if (human.length) { actx.fillStyle = "#567"; actx.fillText(`done: ${human.length}`, arena.width - 70, 20); }
+  }
+}
+
+/* ---------- human collection ---------- */
+const hasRaw = "onpointerrawupdate" in window;
+function onMove(e) {
+  if (!trial) return;
+  const rect = arena.getBoundingClientRect();
+  const evs = hasRaw ? (e.getCoalescedEvents ? e.getCoalescedEvents() : [e]) : [e];
+  for (const ev of evs) {
+    const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+    if (x < 0 || y < 0 || x > arena.width || y > arena.height) continue;
+    const s = trial.samples, last = s[s.length - 1];
+    const t = ev.timeStamp - t0Global;
+    if (!last || last.x !== x || last.y !== y) s.push({ t, x, y });
+  }
+}
+addEventListener(hasRaw ? "pointerrawupdate" : "pointermove", onMove);
+
+function startTrial() {
+  if (trial) return;
+  const prev = human.length ? human[human.length - 1].click : { x: arena.width / 2, y: arena.height / 2 };
+  const min = +$("minDist").value, max = +$("maxDist").value;
+  let sx, sy;
+  for (let i = 0; i < 300; i++) {
+    const a = Math.random() * 2 * Math.PI, d = min + Math.random() * (max - min);
+    sx = prev.x + d * Math.cos(a); sy = prev.y + d * Math.sin(a);
+    if (T.MARGIN < sx && sx < arena.width - T.MARGIN && T.MARGIN < sy && sy < arena.height - T.MARGIN) break;
+    sx = sy = null;
+  }
+  if (sx === null) { sx = T.MARGIN + Math.random() * (arena.width - 2 * T.MARGIN); sy = T.MARGIN + Math.random() * (arena.height - 2 * T.MARGIN); }
+  trial = { spawn: { x: sx, y: sy }, t0: performance.now() - t0Global, samples: [] };
+  $("status").textContent = `回合 ${human.length + 1}: 最快甩过去,点掉红点`;
+  draw();
+}
+
+arena.addEventListener("pointerdown", (e) => {
+  if (!trial) return;
+  const rect = arena.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  const d = Math.hypot(x - trial.spawn.x, y - trial.spawn.y);
+  if (d > T.R) { $("status").textContent = "没点中,继续"; return; }
+  const tc = e.timeStamp - t0Global;
+  human.push(finishSeg({ samples: trial.samples, spawn: trial.spawn, click: { x, y }, tSpawn: trial.t0, tClick: tc }));
+  trial = null;
+  $("status").textContent = `已录 ${human.length} 枪。[空格] 下一枪`;
+  render(); draw();
+});
+
+/* ---------- machine synthesis ---------- */
+function genMachine() {
+  const fps = +$("machFps").value, mf = +$("mfrac").value;
+  const MIN_MOVE = 2, MAX_STEP = 120, dt = 1000 / fps;
+  machine = [];
+  let prev = { x: arena.width / 2, y: arena.height / 2 };
+  const min = +$("minDist").value, max = +$("maxDist").value;
+  for (let k = 0; k < 12; k++) {
+    const a = Math.random() * 2 * Math.PI, dist = min + Math.random() * (max - min);
+    const sx = Math.min(arena.width - T.MARGIN, Math.max(T.MARGIN, prev.x + dist * Math.cos(a)));
+    const sy = Math.min(arena.height - T.MARGIN, Math.max(T.MARGIN, prev.y + dist * Math.sin(a)));
+    let x = prev.x, y = prev.y, t = 0;
+    const samples = [{ t, x, y }];
+    for (let f = 0; f < 2000; f++) {
+      const dx = sx - x, dy = sy - y;
+      if (Math.hypot(dx, dy) <= MIN_MOVE) break;
+      x += Math.max(-MAX_STEP, Math.min(MAX_STEP, Math.trunc(dx * mf)));
+      y += Math.max(-MAX_STEP, Math.min(MAX_STEP, Math.trunc(dy * mf)));
+      t += dt;
+      const lp = samples[samples.length - 1];
+      if (lp.x !== x || lp.y !== y) samples.push({ t, x, y });
+    }
+    machine.push(finishSeg({ samples, spawn: { x: sx, y: sy }, click: { x: sx, y: sy }, tSpawn: 0, tClick: t }));
+    prev = { x: sx, y: sy };
+  }
+  render();
+}
+
+/* ---------- metrics ---------- */
+function finishSeg(raw) {
+  const seg = raw.samples;
+  if (!seg.length) return null;
+  const { spawn } = raw;
+  const dist0 = Math.hypot(seg[0].x - spawn.x, seg[0].y - spawn.y);
+  let path = 0, rev = 0, prevDir = 0, peak = 0;
+  const ds = [], ts = [];
+  for (let i = 1; i < seg.length; i++) {
+    const a = seg[i - 1], b = seg[i];
+    const dSeg = Math.hypot(b.x - a.x, b.y - a.y);
+    path += dSeg;
+    const dtms = b.t - a.t;
+    if (dtms > 0) {
+      const v = dSeg / dtms;
+      if (v > peak) peak = v;
+      const dir = ((spawn.x - a.x) * (b.x - a.x) + (spawn.y - a.y) * (b.y - a.y));
+      const s = dir > 0 ? 1 : (dir < 0 ? -1 : 0);
+      if (s !== 0 && prevDir !== 0 && s !== prevDir) rev++;
+      if (s !== 0) prevDir = s;
+    }
+    const d = Math.hypot(b.x - spawn.x, b.y - spawn.y);
+    if (d > MIN_MOVE_HACK && d < dist0) { ds.push(d); ts.push(b.t - seg[0].t); }
+  }
+  const dts = [];
+  for (let i = 1; i < seg.length; i++) dts.push(seg[i].t - seg[i - 1].t);
+  const jit = dts.length > 2 ? std(dts.slice(1)) : 0;
+  const r2 = expFitR2(ts, ds);
+  const dur = raw.tClick - raw.tSpawn;
+  return { ...raw, dist0, dur, pathRatio: path / Math.max(1, dist0), rev, jit, peak, r2 };
+}
+const MIN_MOVE_HACK = 2;
+function mean(a) { return a.reduce((s, v) => s + v, 0) / (a.length || 1); }
+function std(a) { const m = mean(a); return Math.sqrt(mean(a.map(v => (v - m) ** 2))); }
+function expFitR2(ts, ds) {
+  const n = ts.length; if (n < 4) return NaN;
+  const lx = ts.slice(), ly = ds.map(d => Math.log(d));
+  const mx = mean(lx), my = mean(ly);
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++) { const a = lx[i] - mx, b = ly[i] - my; sxy += a * b; sxx += a * a; syy += b * b; }
+  if (sxx === 0 || syy === 0) return NaN;
+  return (sxy * sxy) / (sxx * syy);
+}
+
+/* ---------- table + charts ---------- */
+function render() {
+  const tb = $("stats").querySelector("tbody");
+  tb.innerHTML = "";
+  const rows = [
+    ...human.map((h, i) => [h, `hum ${i + 1}`, "hum"]),
+    ...machine.map((m, i) => [m, `mach ${i + 1}`, "mac"]),
+  ].filter(r => r[0]);
+  for (const [t, label, cls] of rows) {
+    const tr = document.createElement("tr");
+    tr.className = cls;
+    tr.innerHTML = `<td>${label}</td><td>${t.dur.toFixed(0)}</td><td>${t.pathRatio.toFixed(2)}</td>` +
+      `<td>${t.rev}</td><td>${t.jit.toFixed(2)}</td><td>${isNaN(t.r2) ? "-" : t.r2.toFixed(3)}</td><td>${t.peak.toFixed(1)}</td>`;
+    tb.appendChild(tr);
+  }
+  chartLog(); chartPath();
+}
+
+function chartLog() {
+  const c = $("cLog"), g = c.getContext("2d");
+  g.clearRect(0, 0, c.width, c.height);
+  const all = [...human, ...machine].filter(Boolean);
+  if (!all.length) return;
+  const maxT = Math.max(...all.map(t => t.samples[t.samples.length - 1].t - t.samples[0].t)) * 1.05;
+  const maxD = Math.max(...all.map(t => t.dist0));
+  const X = (v) => 8 + v / maxT * (c.width - 16);
+  const Y = (d) => c.height - 8 - Math.log(Math.max(d, 2) / 2) / Math.log(maxD / 2) * (c.height - 16);
+  g.strokeStyle = "#2a2a33";
+  g.strokeRect(8.5, 8.5, c.width - 17, c.height - 17);
+  for (const t of all) {
+    g.strokeStyle = machine.includes(t) ? "#ff9f6e" : "#7ec3ff";
+    g.lineWidth = 1;
+    g.beginPath();
+    t.samples.forEach((s, i) => {
+      if (i === 0) return;
+      const d = Math.hypot(s.x - t.spawn.x, s.y - t.spawn.y);
+      const px = X(s.t - t.samples[0].t), py = Y(d);
+      if (i === 1) g.moveTo(px, py); else g.lineTo(px, py);
+    });
+    g.stroke();
+  }
+  g.fillStyle = "#667"; g.font = "11px Consolas";
+  g.fillText(`log-scale 距离 | x: 0-${maxT.toFixed(0)} ms | 蓝=人类 橙=机器`, 14, 20);
+}
+
+function chartPath() {
+  const c = $("cPath"), g = c.getContext("2d");
+  g.clearRect(0, 0, c.width, c.height);
+  const all = [...human, ...machine].filter(Boolean);
+  if (!all.length) return;
+  const W = c.width, H = c.height, pad = 30;
+  for (const t of all) {
+    const isM = machine.includes(t);
+    const vx = t.spawn.x - t.samples[0].x, vy = t.spawn.y - t.samples[0].y;
+    const L = Math.max(1, Math.hypot(vx, vy));
+    g.strokeStyle = isM ? "#ff9f6e" : "#7ec3ff";
+    g.lineWidth = isM ? 1.5 : 1;
+    g.beginPath();
+    t.samples.forEach((s, i) => {
+      const ex = s.x - t.samples[0].x, ey = s.y - t.samples[0].y;
+      const px = pad + (ex * vx + ey * vy) / L / L * (W - 2 * pad);
+      const py = H / 2 - (ex * -vy + ey * vx) / L / L * (H - 2 * pad) * 0.5;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    });
+    g.stroke();
+    g.fillStyle = isM ? "#ff9f6e" : "#7ec3ff";
+    g.font = "10px Consolas";
+    g.fillText("start→", pad - 24, H / 2 - 2);
+    g.fillText("target", W - pad - 20, H / 2 - 2);
+  }
+}
+
+/* ---------- export ---------- */
+function exportData() {
+  const dump = (name, txt) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([txt], { type: "text/csv" }));
+    a.download = name; a.click();
+  };
+  const rows = [];
+  for (const [who, set] of [["human", human], ["machine", machine]])
+    for (const t of set) if (t) for (const s of t.samples) rows.push(`${who},${s.t.toFixed(3)},${s.x.toFixed(1)},${s.y.toFixed(1)}`);
+  dump("aimlab_samples.csv", "who,t_ms,x,y\n" + rows.join("\n"));
+  dump("aimlab_trials.json", JSON.stringify({
+    sampling: hasRaw ? "pointerrawupdate" : "pointermove",
+    human: human.map(t => ({ dur: t.dur, dist0: t.dist0, pathRatio: t.pathRatio, rev: t.rev, jit: t.jit, r2: t.r2, peak: t.peak })),
+    machine: machine.map(t => ({ params: { mf: +$("mfrac").value, fps: +$("machFps").value }, dur: t.dur, r2: t.r2 })),
+  }, null, 2));
+}
+
+/* ---------- wiring ---------- */
+$("btnTrial").onclick = startTrial;
+$("btnMachine").onclick = genMachine;
+$("btnExport").onclick = exportData;
+$("btnFinish").onclick = () => { $("status").textContent = `结束。共 ${human.length} 枪人类样本。` ; trial = null; draw(); };
+addEventListener("keydown", (e) => { if (e.code === "Space") { e.preventDefault(); startTrial(); } });
+draw();
+</script>
+</body>
+</html>
