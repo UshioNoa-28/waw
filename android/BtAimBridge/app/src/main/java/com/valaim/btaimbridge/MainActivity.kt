@@ -64,6 +64,33 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnRefresh).setOnClickListener {
             tvIp.text = "PC IP: ${localIp()}"
         }
+
+        setupTouchpad()
+    }
+
+    private fun setupTouchpad() {
+        val pad = findViewById<android.view.View>(R.id.touchpad)
+        var lastX = 0f
+        var lastY = 0f
+        pad.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    lastX = ev.x
+                    lastY = ev.y
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = (ev.x - lastX).toInt()
+                    val dy = (ev.y - lastY).toInt()
+                    lastX = ev.x
+                    lastY = ev.y
+                    if (dx != 0 || dy != 0) {
+                        val ok = hid.sendReport(0, dx, dy, 0)
+                        if (!ok) setStatus("touchpad: HID not connected")
+                    }
+                }
+            }
+            true
+        }
     }
 
     private fun setStatus(s: String) = main.post { tvStatus.text = s }

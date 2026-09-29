@@ -96,14 +96,29 @@
             android:text="Idle"
             android:textSize="15sp"
             android:paddingTop="24dp"
-            android:paddingBottom="24dp" />
+            android:paddingBottom="12dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="TOUCHPAD - drag here to move the PC cursor"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:paddingBottom="6dp" />
+
+        <View
+            android:id="@+id/touchpad"
+            android:layout_width="match_parent"
+            android:layout_height="260dp"
+            android:background="#22000000" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textSize="12sp"
             android:alpha="0.7"
-            android:text="How to use&#10;1. Tap START, allow Bluetooth.&#10;2. Tap Make discoverable.&#10;3. On the PC: Bluetooth &gt; Add device &gt; BtAimBridge.&#10;4. Status should say CONNECTED.&#10;5. Run the aim tool with --bt-host &lt;the IP above&gt;.&#10;&#10;Keep this screen open. Set battery to Unrestricted." />
+            android:paddingTop="16dp"
+            android:text="If dragging here moves the PC cursor, the Bluetooth HID link works.&#10;&#10;Then on the PC run:&#10;ValAim.exe --input-backend bt --bt-host &lt;the IP above&gt;&#10;&#10;Keep this screen open." />
 
     </LinearLayout>
 </ScrollView>

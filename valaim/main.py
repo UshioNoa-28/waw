@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--key", default="F8")
     p.add_argument("--triggerbot", action="store_true")
     p.add_argument("--trigger-radius", type=int, default=80)
-    p.add_argument("--input-backend", default="auto", choices=["auto", "bt", "vhid", "sendinput"])
+    p.add_argument("--input-backend", default="auto", choices=["auto", "bt", "sendinput"])
     p.add_argument("--bt-host", default=None, help="Phone IP shown in the BtAimBridge app")
     p.add_argument("--bt-port", type=int, default=47800)
     p.add_argument("--bt-test", action="store_true", help="Ignore the model; just drive the mouse in a circle to test the BT link")

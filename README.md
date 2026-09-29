@@ -156,9 +156,10 @@ uv run --extra cpu python -m valaim.main \
 --max-step 120              Maximum mouse movement per frame
 --triggerbot                Click while the aim point is inside trigger radius
 --trigger-radius 80         Triggerbot radius in pixels
---input-backend auto        auto|bt|vhid|sendinput (see Notes)
+--input-backend auto        auto|bt|sendinput (see Notes)
 --bt-host 192.168.x.x       Phone IP shown in the BtAimBridge app
 --bt-port 47800             TCP port for the Bluetooth bridge
+--bt-test                   Ignore the model; draw circles to verify the BT link
 --max-frames 0              Run only this many frames; 0 disables the limit
 ```
 
@@ -168,10 +169,9 @@ uv run --extra cpu python -m valaim.main \
 - Export needs PyTorch/Ultralytics only once.
 - **Input backends (`--input-backend`):**
   - `bt` - sends relative moves over the LAN to the **BtAimBridge** Android app, which re-emits them as a real **Bluetooth HID mouse**. This bypasses Vanguard's synthetic-input filter (verified working while the game is focused) with **no kernel driver and no extra hardware**. Requires a phone running the app; see `android/README.md`. Set the phone IP with `--bt-host` (or the `BT_BRIDGE_HOST` env var).
-  - `vhid` - writes mouse reports into the VHF virtual mouse driver's shared ring. Also bypasses the filter, but needs the driver signed/loaded (see `kernel/README.md`).
   - `sendinput` - classic `SendInput`/`mouse_event`. Only works when the game is **not** focused under Vanguard.
-  - `auto` (default) - tries `bt` (if a host is configured), then `vhid`, then `sendinput`.
-- **Aiming while the game is focused:** Valorant locks the crosshair to the centre of the monitor and hides the OS cursor, so the aim reference is the monitor centre (`--capture-anchor crosshair`, the default), not the cursor. Use `--capture-anchor cursor` only if you really want to follow the desktop pointer. Vanguard is not the reason input fails while focused - the synthetic-input filter is; use `--input-backend vhid` for that. Administrator is still recommended so the process can reach drivers and capture a game that runs elevated.
+  - `auto` (default) - uses `bt` when a host is configured, otherwise `sendinput`.
+- **Aiming while the game is focused:** Valorant locks the crosshair to the centre of the monitor and hides the OS cursor, so the aim reference is the monitor centre (`--capture-anchor crosshair`, the default), not the cursor. Use `--capture-anchor cursor` only if you really want to follow the desktop pointer. Use `--input-backend bt` so input survives the game being focused.
 - **Fullscreen vs borderless:** exclusive fullscreen can make `mss` return black frames. Set Valorant to **Windowed Fullscreen (Borderless)** on the same monitor as `--monitor`.
 - When the model exposes a head class (`head`, `enemy_head`, `Head`, ...), that detection is aimed at directly and given a `head_boost` so it wins over the body box. When it does not, the aim point is estimated from the body box via `--aim-mode head` (top-center), `head_wide` (slightly lower), or `body` (chest).
 - If a model was exported with built-in NMS, the decoder tries to handle both raw YOLO output and end-to-end detection output.

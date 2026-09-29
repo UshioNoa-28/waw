@@ -70,17 +70,15 @@ def get_cursor_pos() -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 # Input backend selection
 #
-# "bt"    -> send relative moves to the BtAimBridge Android app over TCP; the
-#            phone re-emits them as a real Bluetooth HID mouse. Vanguard sees
-#            a hardware mouse, not synthetic input.
-# "vhid"  -> write reports into the VHF virtual mouse driver's shared ring.
+# "bt"        -> send relative moves to the BtAimBridge Android app over TCP;
+#              the phone re-emits them as a real Bluetooth HID mouse. Vanguard
+#              sees a hardware mouse, not synthetic input.
 # "sendinput" -> classic user32 injection (dropped while a Vanguard game is
-#            focused).
-# "auto"  -> try bt, then vhid, then sendinput.
+#              focused).
+# "auto"      -> use bt when a host is configured, else sendinput.
 # ---------------------------------------------------------------------------
 
 _BACKEND = "auto"
-_VHID = None
 _BT = None
 
 
@@ -90,9 +88,9 @@ def set_backend(name: str, bt_host: str | None = None, bt_port: int = 47800) -> 
     bt_host may come from --bt-host. If it is None, the BT_BRIDGE_HOST
     environment variable is used.
     """
-    global _BACKEND, _VHID, _BT
+    global _BACKEND, _BT
     name = (name or "auto").lower()
-    if name not in {"auto", "bt", "vhid", "sendinput"}:
+    if name not in {"auto", "bt", "sendinput"}:
         raise ValueError(f"Unknown input backend: {name}")
 
     if bt_host is None:
@@ -108,21 +106,8 @@ def set_backend(name: str, bt_host: str | None = None, bt_port: int = 47800) -> 
         except Exception as exc:
             if name == "bt":
                 raise
-            print(f"[input] bt unavailable ({exc}); trying next backend", file=sys.stderr)
+            print(f"[input] bt unavailable ({exc}); falling back to sendinput", file=sys.stderr)
 
-    if name in {"auto", "vhid"}:
-        try:
-            from .hid_mouse import VhidMouse
-
-            _VHID = VhidMouse()
-            _BACKEND = "vhid"
-            return _BACKEND
-        except Exception as exc:
-            if name == "vhid":
-                raise
-            print(f"[input] vhid unavailable ({exc}); using sendinput", file=sys.stderr)
-
-    _VHID = None
     _BACKEND = "sendinput"
     return _BACKEND
 
@@ -132,19 +117,13 @@ def active_backend() -> str:
 
 
 def close_backend() -> None:
-    global _VHID, _BT
+    global _BT
     if _BT is not None:
         try:
             _BT.close()
         except Exception:
             pass
         _BT = None
-    if _VHID is not None:
-        try:
-            _VHID.close()
-        except Exception:
-            pass
-        _VHID = None
 
 
 def _send_input_move(dx: int, dy: int) -> None:
@@ -170,9 +149,6 @@ def move_mouse(dx: int, dy: int) -> None:
         return
     if _BT is not None:
         _BT.move(int(dx), int(dy))
-        return
-    if _VHID is not None:
-        _VHID.move(int(dx), int(dy))
         return
     _send_input_move(int(dx), int(dy))
 
@@ -211,14 +187,6 @@ def set_mouse_button(button: str, down: bool) -> None:
         _BT._button_mask = (getattr(_BT, "_button_mask", 0) | bit) if down \
             else (getattr(_BT, "_button_mask", 0) & ~bit)
         _BT.set_buttons(_BT._button_mask)
-        return
-
-    if _VHID is not None:
-        from .hid_mouse import BTN_LEFT, BTN_RIGHT
-
-        bit = BTN_LEFT if button == "left" else BTN_RIGHT
-        current = _VHID.button_state
-        _VHID.button_state = current | bit if down else current & ~bit
         return
 
     flag = MOUSEEVENTF_LEFTDOWN if button == "left" else MOUSEEVENTF_RIGHTDOWN
