@@ -1,38 +1,36 @@
-"""Aim shaping: turn a pixel error into a mouse step.
+"""Aim shaping: turn a per-frame pixel error into a mouse step.
 
-The detector gives a target position every frame; the naive response is
-``move(error * fraction)``, which produces a dead-straight, perfectly
-proportional snap. This module adds three cheap layers that break that
-signature:
+Design goals for this build: **stability**, not human-likeness.
 
-  * **proportional damping** - move a fraction of the remaining error, so the
-    approach is exponential rather than a teleport;
-  * **overshoot** - on a large error, briefly move past the target before
-    settling, mirroring how a hand corrects;
-  * **micro-tremor** - a small stochastic jitter on every step, the action
-    tremor a human hand cannot suppress.
-
-Fully human behavioural shaping (reaction delay, Ornstein-Uhlenbeck tremor
-band, idle drift) is intentionally left as a later stage; the hooks are here.
+  * **Sub-pixel accumulation** - fractional remainders are carried to the next
+    frame, so small errors are not rounded away to zero.
+  * **Error smoothing** - an exponential moving average damps the frame-to-frame
+    jitter of the model's bounding box, so the crosshair does not twitch on a
+    static target.
+  * **Slew limit** - the per-frame step is capped in pixels, so a large or noisy
+    error cannot fling the crosshair past the target (no more "jumps to the
+    head and overshoots").
+  * **Dead zone** - inside a small radius, nothing is emitted.
 """
 
 from __future__ import annotations
 
 import math
-import random
 from dataclasses import dataclass
 
 
 @dataclass
 class AimParams:
-    move_fraction: float = 0.65
-    max_step: int = 120
-    min_move: float = 2.0
+    move_fraction: float = 0.65   # fraction of the (smoothed) error per frame
+    max_step: int = 60            # hard cap on pixels per frame
+    min_move: float = 1.0
 
-    deadzone: float = 3.0
+    deadzone: float = 2.0         # stop inside this radius (px)
+    smoothing: float = 0.4        # EMA weight for new error (0=ignore,1=raw)
+
+    # Human-like extras, off by default in the stable build.
     tremor_px: float = 0.0
     tremor_freq: float = 8.0
-
     overshoot_factor: float = 1.0
     overshoot_error: float = 99999.0
     overshoot_frames: int = 0
@@ -45,35 +43,35 @@ class AimEngine:
 
     def __init__(self, params: AimParams | None = None, seed: int | None = None) -> None:
         self.p = params or AimParams()
-        self._rng = random.Random(seed)
+        self._sx: float | None = None   # smoothed error x
+        self._sy: float | None = None
+        self._carry_x = 0.0             # sub-pixel remainder
+        self._carry_y = 0.0
         self._overshoot_left = 0
-        self._phase = 0.0
-        self._tremor = (0.0, 0.0)
 
     def reset(self) -> None:
+        self._sx = self._sy = None
+        self._carry_x = self._carry_y = 0.0
         self._overshoot_left = 0
-        self._phase = 0.0
-        self._tremor = (0.0, 0.0)
-
-    def _tremor_step(self) -> tuple[float, float]:
-        p = self.p
-        self._phase += 2.0 * math.pi * p.tremor_freq / 120.0
-        # Small random walk so the jitter is band-limited rather than white.
-        tx = 0.7 * self._tremor[0] + self._rng.uniform(-1.0, 1.0)
-        ty = 0.7 * self._tremor[1] + self._rng.uniform(-1.0, 1.0)
-        self._tremor = (tx, ty)
-        return tx * p.tremor_px, ty * p.tremor_px
 
     def step(self, dx: float, dy: float) -> tuple[int, int]:
-        """Return a relative mouse step for a pixel error."""
+        """Return a relative mouse step for the current pixel error."""
         p = self.p
-        dist = math.hypot(dx, dy)
+
+        # Exponential moving average of the target error (damps model jitter).
+        if self._sx is None:
+            self._sx, self._sy = dx, dy
+        else:
+            a = max(0.05, min(1.0, p.smoothing))
+            self._sx += a * (dx - self._sx)
+            self._sy += a * (dy - self._sy)
+
+        ex, ey = self._sx, self._sy
+        dist = math.hypot(ex, ey)
 
         if dist <= p.deadzone:
-            tx, ty = self._tremor_step()
-            wx = int(round(tx))
-            wy = int(round(ty))
-            return wx, wy
+            self._carry_x = self._carry_y = 0.0
+            return 0, 0
 
         gain = p.move_fraction
         if dist > p.overshoot_error and self._overshoot_left == 0:
@@ -82,22 +80,23 @@ class AimEngine:
             gain *= p.overshoot_factor
             self._overshoot_left -= 1
 
-        mx = dx * gain
-        my = dy * gain
+        step_x = ex * gain + self._carry_x
+        step_y = ey * gain + self._carry_y
 
-        tx, ty = self._tremor_step()
-        mx += tx
-        my += ty
+        # Slew limit (also respects the HID report's +-127 range).
+        limit = max(1, min(p.max_step, p.max_segment))
+        mag = math.hypot(step_x, step_y)
+        if mag > limit:
+            scale = limit / mag
+            step_x *= scale
+            step_y *= scale
 
-        sx = max(-p.max_step, min(p.max_step, int(round(mx))))
-        sy = max(-p.max_step, min(p.max_step, int(round(my))))
+        ix = int(round(step_x))
+        iy = int(round(step_y))
+        self._carry_x = step_x - ix
+        self._carry_y = step_y - iy
 
-        if abs(sx) < p.min_move and dist > p.deadzone:
-            sx = int(math.copysign(min(p.min_move, p.max_step), dx or 1))
-        if abs(sy) < p.min_move and dist > p.deadzone:
-            sy = int(math.copysign(min(p.min_move, p.max_step), dy or 1))
-
-        return sx, sy
+        return ix, iy
 
 
 def split_segments(dx: int, dy: int, max_segment: int = 127) -> list[tuple[int, int]]:

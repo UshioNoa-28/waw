@@ -31,16 +31,16 @@ class TargetSelector:
 
     def _aim_point(self, det: Detection) -> tuple[float, float]:
         cx = det.x + det.w / 2.0
+        off = self.cfg.head_offset_y
         if self._is_head(det):
-            # Aim slightly below the head-box centre: the detected box often
-            # includes hair/helmet above the actual hitbox, which reads as
-            # "aiming too high".
-            return cx, det.y + det.h * self.cfg.head_bias
+            # Aim inside the head box; head_offset_y nudges it further down if
+            # the detector's head box sits above the real hitbox.
+            return cx, det.y + det.h * self.cfg.head_bias + off
         if self.cfg.aim_mode == "head":
-            return cx, det.y + det.h * self.cfg.head_height
+            return cx, det.y + det.h * self.cfg.head_height + off
         if self.cfg.aim_mode == "head_wide":
-            return cx, det.y + det.h * self.cfg.head_width
-        return cx, det.y + det.h * self.cfg.aim_height
+            return cx, det.y + det.h * self.cfg.head_width + off
+        return cx, det.y + det.h * self.cfg.aim_height + off
 
     def select(self, detections: list[Detection], cursor: tuple[int, int]) -> Target | None:
         best: Target | None = None

@@ -28,7 +28,10 @@ class AimConfig:
     head_boost: float = 0.35
     min_move: int = 2
     move_fraction: float = 0.65
-    max_step: int = 120
+    max_step: int = 60
+    smoothing: float = 0.4
+    deadzone: float = 2.0
+    head_offset_y: float = 0.0
 
     keybind: str = ""
     hold_button: str = ""

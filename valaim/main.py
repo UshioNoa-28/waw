@@ -46,8 +46,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--head-width", type=float, default=0.16)
     p.add_argument("--head-bias", type=float, default=0.55,
                    help="Vertical aim point inside a head box (0=top, 1=bottom; default 0.55)")
+    p.add_argument("--head-offset-y", type=float, default=0.0,
+                   help="Extra downward aim offset in capture pixels (use if it aims too high)")
     p.add_argument("--move-fraction", type=float, default=0.65)
-    p.add_argument("--max-step", type=int, default=120)
+    p.add_argument("--max-step", type=int, default=60, help="Max pixels moved per frame (slew limit)")
+    p.add_argument("--smoothing", type=float, default=0.4,
+                   help="Error smoothing 0..1 (lower = steadier, more lag)")
+    p.add_argument("--deadzone", type=float, default=2.0, help="Stop radius in pixels")
     p.add_argument("--key", default="none", help="Hold this key to aim (default: none = always on)")
     p.add_argument("--hold-button", default="none",
                    choices=["none", "left", "right", "middle", "x1", "x2"],
@@ -85,6 +90,9 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         aim_height=args.aim_height,
         head_height=args.head_height,
         head_bias=args.head_bias,
+        head_offset_y=args.head_offset_y,
+        smoothing=args.smoothing,
+        deadzone=args.deadzone,
         head_width=args.head_width,
         move_fraction=args.move_fraction,
         max_step=args.max_step,
@@ -218,6 +226,8 @@ def run(cfg: AimConfig) -> None:
             move_fraction=cfg.move_fraction,
             max_step=cfg.max_step,
             min_move=cfg.min_move,
+            smoothing=cfg.smoothing,
+            deadzone=cfg.deadzone,
         )
     )
 
