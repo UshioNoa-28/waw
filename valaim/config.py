@@ -36,6 +36,8 @@ class AimConfig:
     input_backend: str = "auto"
     bt_host: str | None = None
     bt_port: int = 47800
+    bt_test: bool = False
+    bt_test_radius: int = 60
 
     debug: bool = False
     frame_sleep: float = 0.001

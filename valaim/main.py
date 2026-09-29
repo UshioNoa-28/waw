@@ -51,6 +51,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--input-backend", default="auto", choices=["auto", "bt", "vhid", "sendinput"])
     p.add_argument("--bt-host", default=None, help="Phone IP shown in the BtAimBridge app")
     p.add_argument("--bt-port", type=int, default=47800)
+    p.add_argument("--bt-test", action="store_true", help="Ignore the model; just drive the mouse in a circle to test the BT link")
+    p.add_argument("--bt-test-radius", type=int, default=60)
     p.add_argument("--debug", action="store_true")
     p.add_argument("--max-frames", type=int, default=0)
     return p.parse_args()
@@ -84,6 +86,8 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         input_backend=args.input_backend,
         bt_host=args.bt_host,
         bt_port=args.bt_port,
+        bt_test=args.bt_test,
+        bt_test_radius=args.bt_test_radius,
         debug=args.debug,
         max_frames=args.max_frames,
     )
@@ -152,6 +156,33 @@ def write_log(path: str, line: str) -> None:
         pass
 
 
+def bt_test_loop(cfg: AimConfig) -> None:
+    """Drive the mouse in a circle forever, to verify the BT HID link.
+
+    No model, no capture, no focus logic: just relative moves. If the in-game
+    crosshair traces a circle, the phone->game input path works.
+    """
+    import math as _math
+
+    print("BT TEST MODE: drawing circles. Move = should move in-game. Ctrl+C to stop.")
+    r = max(1, cfg.bt_test_radius)
+    step_hz = 120.0
+    prev_x = float(r)
+    prev_y = 0.0
+    angle = 0.0
+    t = 0.0
+    while True:
+        angle += 2.0 * _math.pi / 60.0  # full circle every 60 steps
+        x = r * _math.cos(angle)
+        y = r * _math.sin(angle)
+        dx = int(round(x - prev_x))
+        dy = int(round(y - prev_y))
+        prev_x, prev_y = x, y
+        if dx or dy:
+            move_mouse(dx, dy)
+        time.sleep(1.0 / step_hz)
+
+
 def run(cfg: AimConfig) -> None:
     import cv2
 
@@ -195,6 +226,10 @@ def run(cfg: AimConfig) -> None:
         print(f"[input] BT bridge -> {cfg.bt_host}:{cfg.bt_port} (phone must be paired as Bluetooth mouse)")
     if backend == "sendinput":
         print("[input] WARNING: SendInput is dropped while Vanguard-protected games are focused.")
+
+    if cfg.bt_test:
+        bt_test_loop(cfg)
+        return
 
     print(f"Keybind: hold {cfg.keybind} to aim (point your crosshair near the enemy)")
 

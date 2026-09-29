@@ -29,8 +29,8 @@ REM  Do NOT install more than one onnxruntime variant at a time.
 REM ============================================================
 set "BACKEND=amd"
 
-REM Also compile the VHF virtual mouse driver? 1 = yes, 0 = skip.
-set "BUILD_DRIVER=1"
+REM Kernel driver disabled: the Bluetooth (bt) backend is used instead.
+set "BUILD_DRIVER=0"
 
 cd /d "%~dp0"
 if errorlevel 1 goto :error_cd
@@ -39,6 +39,7 @@ set "ROOT=%~dp0"
 set "DIST=%ROOT%dist"
 set "STAGE=%DIST%\ValAim"
 set "LOG=%ROOT%build.log"
+set "PF86=%ProgramFiles(x86)%"
 
 echo ==== ValAim build %DATE% %TIME% ==== >> "%LOG%"
 
@@ -107,7 +108,7 @@ if "%BUILD_DRIVER%"=="0" (
 
 where msbuild >nul 2>&1
 if errorlevel 1 (
-    if not exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
+    if not exist "%PF86%\Microsoft Visual Studio\Installer\vswhere.exe" (
         echo [warn] Neither msbuild nor vswhere found. Install Visual Studio 2022
         echo        ^("Desktop development with C++" workload^) plus the WDK,
         echo        or set BUILD_DRIVER=0 to skip the driver.
