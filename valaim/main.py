@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--iou", type=float, default=0.45)
     p.add_argument("--classes", nargs="*", default=[])
     p.add_argument("--exclude-classes", nargs="*", default=[])
-    p.add_argument("--fov", type=int, default=500)
+    p.add_argument("--fov", type=int, default=160)
     p.add_argument("--aim-height", type=float, default=0.30)
     p.add_argument("--aim-mode", default="head", choices=["head", "head_wide", "body"])
     p.add_argument("--head-height", type=float, default=0.10)
@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
                    help="Vertical aim point inside a head box (0=top, 1=bottom; default 0.55)")
     p.add_argument("--move-fraction", type=float, default=0.65)
     p.add_argument("--max-step", type=int, default=120)
-    p.add_argument("--key", default="ALT", help="Hold this key to aim (default: ALT)")
+    p.add_argument("--key", default="none", help="Hold this key to aim (default: none = always on)")
     p.add_argument("--hold-button", default="none",
                    choices=["none", "left", "right", "middle", "x1", "x2"],
                    help="Aim only while this mouse button is held (default: left)")
@@ -88,7 +88,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         head_width=args.head_width,
         move_fraction=args.move_fraction,
         max_step=args.max_step,
-        keybind=args.key,
+        keybind="" if args.key.lower() == "none" else args.key,
         hold_button="" if args.hold_button == "none" else args.hold_button,
         triggerbot=args.triggerbot,
         trigger_radius=args.trigger_radius,

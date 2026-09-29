@@ -19,7 +19,7 @@ class AimConfig:
     target_classes: tuple[str, ...] = field(default_factory=tuple)
     exclude_classes: tuple[str, ...] = field(default_factory=tuple)
 
-    fov_radius: int = 500
+    fov_radius: int = 160
     aim_mode: str = "head"
     aim_height: float = 0.30
     head_height: float = 0.10
@@ -30,7 +30,7 @@ class AimConfig:
     move_fraction: float = 0.65
     max_step: int = 120
 
-    keybind: str = "ALT"
+    keybind: str = ""
     hold_button: str = ""
     triggerbot: bool = False
     trigger_radius: int = 80
