@@ -1,6 +1,21 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
+REM Re-launch once under a console that keeps a log and never closes early.
+if not "%~1"=="--inner" (
+    if not exist "%~dp0build.log" echo. > "%~dp0build.log"
+    echo ============================================== >> "%~dp0build.log"
+    echo Build started %DATE% %TIME% >> "%~dp0build.log"
+    call "%~f0" --inner 2>&1 | powershell -NoProfile -Command "$input | Tee-Object -FilePath '%~dp0build.log' -Append"
+    echo.
+    echo --------------------------------------------------
+    echo Build finished. Full log saved to build.log
+    echo If something failed, open build.log or scroll up.
+    echo Press any key to close this window.
+    pause >nul
+    exit /b
+)
+
 REM ============================================================
 REM  ValAim - full Windows build
 REM
@@ -25,7 +40,7 @@ set "DIST=%ROOT%dist"
 set "STAGE=%DIST%\ValAim"
 set "LOG=%ROOT%build.log"
 
-echo ==== ValAim build %DATE% %TIME% ==== > "%LOG%"
+echo ==== ValAim build %DATE% %TIME% ==== >> "%LOG%"
 
 echo.
 echo ================================================
