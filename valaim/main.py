@@ -200,8 +200,15 @@ def bt_test_loop(cfg: AimConfig) -> None:
         time.sleep(1.0 / step_hz)
 
 
-def run(cfg: AimConfig) -> None:
+def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     import cv2
+
+    def _status(text: str) -> None:
+        if status is not None:
+            try:
+                status.set(text)
+            except Exception:
+                pass
 
     model_info = resolve_model_info(cfg)
     names = load_class_names(model_info)
@@ -263,10 +270,19 @@ def run(cfg: AimConfig) -> None:
     print(f"Log: {log_file}")
 
     while True:
+        if stop_flag is not None and stop_flag.is_set():
+            break
         if cfg.max_frames and frames >= cfg.max_frames:
             break
 
         frame_start = time.monotonic()
+
+        # Push live-tunable params (the GUI can change cfg at any time).
+        engine.p.move_fraction = cfg.move_fraction
+        engine.p.max_step = cfg.max_step
+        engine.p.min_move = cfg.min_move
+        engine.p.smoothing = cfg.smoothing
+        engine.p.deadzone = cfg.deadzone
         img, crop_x, crop_y, crop_w, crop_h = capture.grab()
         detections = detector.detect(img, crop_x, crop_y)
         cursor = capture.crosshair()
@@ -318,6 +334,7 @@ def run(cfg: AimConfig) -> None:
         now = time.monotonic()
         if status != last_status or now - last_log_time >= 1.0:
             write_log(log_file, status)
+            _status(status)
             last_log_time = now
             last_status = status
 

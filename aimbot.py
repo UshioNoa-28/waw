@@ -1,7 +1,7 @@
 """Executable entry point for PyInstaller.
 
-Importing ``valaim.main`` (rather than running ``main.py`` directly) keeps the
-package's relative imports intact when the code is bundled into a single exe.
+Launches the Tkinter control panel by default. Pass ``--cli`` to use the old
+command-line interface instead.
 """
 import io
 import sys
@@ -17,18 +17,21 @@ def _ensure_streams() -> None:
 
 def run() -> None:
     _ensure_streams()
-    argv = list(sys.argv)
-    if not any(a == "--input-backend" or a.startswith("--input-backend=") for a in argv):
-        # Prefer the Bluetooth bridge when a phone host is configured.
-        import os
-        if os.environ.get("BT_BRIDGE_HOST"):
-            argv += ["--input-backend", "bt"]
-        else:
-            argv += ["--input-backend", "auto"]
-    sys.argv = argv
-    from valaim.main import main
+    argv = sys.argv[1:]
 
-    main()
+    if "--cli" in argv:
+        argv = [a for a in argv if a != "--cli"]
+        if not any(a == "--input-backend" or a.startswith("--input-backend=") for a in argv):
+            import os
+            if os.environ.get("BT_BRIDGE_HOST"):
+                argv += ["--input-backend", "bt"]
+        sys.argv = [sys.argv[0]] + argv
+        from valaim.main import main as cli_main
+        cli_main()
+        return
+
+    from valaim.gui import main as gui_main
+    gui_main()
 
 
 if __name__ == "__main__":

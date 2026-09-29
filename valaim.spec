@@ -14,7 +14,7 @@ MODEL_REL = os.path.join("models", "valorant_head_body")
 
 datas = []
 binaries = []
-hiddenimports = []
+hiddenimports = ["tkinter"]
 
 for pkg in ("onnxruntime", "cv2", "mss", "numpy"):
     d, b, h = collect_all(pkg)
@@ -53,5 +53,5 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,  # set to False for a silent (no console window) build
+    console=False,  # windowed: the GUI is the main interface; use --cli for console
 )
