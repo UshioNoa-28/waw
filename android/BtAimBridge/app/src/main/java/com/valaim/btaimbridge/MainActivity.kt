@@ -174,12 +174,16 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
-    private fun localIp(): String = try {
-        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        @Suppress("DEPRECATION")
-        val ip = wm.connectionInfo.ipAddress
-        if (ip == 0) "no wifi" else Formatter.formatIpAddress(ip)
-    } catch (_: Exception) "unknown"
+    @Suppress("DEPRECATION")
+    private fun localIp(): String {
+        return try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val ip = wm.connectionInfo.ipAddress
+            if (ip == 0) "no wifi" else Formatter.formatIpAddress(ip).toString()
+        } catch (e: Exception) {
+            "unknown"
+        }
+    }
 
     override fun onDestroy() {
         if (bound) {
