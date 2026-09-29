@@ -10,8 +10,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 /**
@@ -21,6 +24,7 @@ import androidx.core.app.NotificationCompat
 class BridgeService : Service() {
 
     companion object {
+        private const val TAG = "BtAimBridgeSvc"
         const val ACTION_START = "com.valaim.btaimbridge.START"
         const val ACTION_STOP = "com.valaim.btaimbridge.STOP"
         const val ACTION_STATUS = "com.valaim.btaimbridge.STATUS"
@@ -36,6 +40,9 @@ class BridgeService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
+    private val main = Handler(Looper.getMainLooper())
+    private var lastStatus = "Idle"
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -45,56 +52,87 @@ class BridgeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
-                stopBridge()
-                stopSelf()
-                return START_NOT_STICKY
+        Log.i(TAG, "onStartCommand action=${intent?.action}")
+        try {
+            when (intent?.action) {
+                ACTION_STOP -> {
+                    stopBridge()
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                else -> startBridge()
             }
-            else -> startBridge()
+        } catch (t: Throwable) {
+            // Never let an exception leave the UI stuck on "Starting...".
+            Log.e(TAG, "onStartCommand failed", t)
+            publish("ERROR: ${t.javaClass.simpleName}: ${t.message}")
         }
         return START_STICKY
     }
 
     private fun startBridge() {
-        startForeground(NOTIF_ID, buildNotification("Starting..."))
+        publish("Starting...")
+
+        // Android 14+ requires the foreground type declared in the manifest.
+        // If startForeground throws, keep going so the UI still reports status.
+        try {
+            startForeground(NOTIF_ID, buildNotification("Starting..."))
+        } catch (t: Throwable) {
+            Log.e(TAG, "startForeground failed", t)
+            publish("startForeground failed: ${t.message}")
+        }
 
         val port = prefs.getInt(MainActivity.KEY_PORT, MainActivity.DEFAULT_PORT)
+
         val hidCtrl = HidMouseController(this) { msg -> publish(msg) }
         hid = hidCtrl
-        hidCtrl.register()
+        try {
+            hidCtrl.register()
+        } catch (t: Throwable) {
+            publish("HID register error: ${t.message}")
+        }
 
         server = BridgeServer(
             portProvider = { prefs.getInt(MainActivity.KEY_PORT, MainActivity.DEFAULT_PORT) },
             hid = hidCtrl,
             onLog = { msg -> publish(msg) },
-            onClient = { ip -> publish("PC connected from $ip (port $port)") },
-        ).also { it.start() }
+            onClient = { ip -> publish("PC connected from $ip") },
+        ).also {
+            try {
+                it.start()
+            } catch (t: Throwable) {
+                publish("Server start error: ${t.message}")
+            }
+        }
 
         acquireLocks()
-        publish("Bridge running on port $port")
+        publish("Bridge listening on TCP $port - waiting for HID host")
     }
 
     private fun stopBridge() {
-        server?.stop()
+        try { server?.stop() } catch (_: Exception) {}
         server = null
-        hid?.unregister()
+        try { hid?.unregister() } catch (_: Exception) {}
         hid = null
         releaseLocks()
         publish("Stopped")
     }
 
     private fun acquireLocks() {
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "btaimbridge:cpu").apply {
-            setReferenceCounted(false)
-            acquire()
-        }
-        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "btaimbridge:wifi").apply {
-            setReferenceCounted(false)
-            acquire()
-        }
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "btaimbridge:cpu").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Exception) {}
+        try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "btaimbridge:wifi").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Exception) {}
     }
 
     private fun releaseLocks() {
@@ -105,10 +143,17 @@ class BridgeService : Service() {
     }
 
     private fun publish(status: String) {
-        // Update notification text and broadcast to the Activity.
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(NOTIF_ID, buildNotification(status))
-        sendBroadcast(Intent(ACTION_STATUS).putExtra(EXTRA_STATUS, status))
+        Log.i(TAG, "status: $status")
+        lastStatus = status
+        main.post {
+            try {
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(NOTIF_ID, buildNotification(status))
+            } catch (_: Exception) {}
+            try {
+                sendBroadcast(Intent(ACTION_STATUS).putExtra(EXTRA_STATUS, status))
+            } catch (_: Exception) {}
+        }
     }
 
     private fun createChannel() {
