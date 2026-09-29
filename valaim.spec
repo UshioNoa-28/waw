@@ -9,8 +9,8 @@ import os
 from PyInstaller.utils.hooks import collect_all
 
 BASE = os.path.dirname(os.path.abspath(SPEC))
-MODEL_DIR = os.path.join(BASE, "models", "yolo11n_valorant_head_body")
-MODEL_REL = os.path.join("models", "yolo11n_valorant_head_body")
+MODEL_DIR = os.path.join(BASE, "models", "valorant_head_body")
+MODEL_REL = os.path.join("models", "valorant_head_body")
 
 datas = []
 binaries = []

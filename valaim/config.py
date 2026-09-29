@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class AimConfig:
-    model_path: str = "models/yolo11n_valorant_head_body/model.onnx"
+    model_path: str = "models/valorant_head_body/model.onnx"
     model_info: str | None = None
     backend: str = "auto"
     device_id: int = 0
