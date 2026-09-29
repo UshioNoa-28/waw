@@ -12,6 +12,7 @@ from .backend import OnnxDetector
 from .capture import ScreenCapture
 from .config import AimConfig
 from .input_ctrl import (
+    mouse_button_down,
     active_backend,
     close_backend,
     key_state,
@@ -43,9 +44,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--aim-mode", default="head", choices=["head", "head_wide", "body"])
     p.add_argument("--head-height", type=float, default=0.10)
     p.add_argument("--head-width", type=float, default=0.16)
+    p.add_argument("--head-bias", type=float, default=0.55,
+                   help="Vertical aim point inside a head box (0=top, 1=bottom; default 0.55)")
     p.add_argument("--move-fraction", type=float, default=0.65)
     p.add_argument("--max-step", type=int, default=120)
-    p.add_argument("--key", default="", help="Hold this key to aim (default: always on)")
+    p.add_argument("--key", default="", help="Hold this key to aim (default: none)")
+    p.add_argument("--hold-button", default="left",
+                   choices=["none", "left", "right", "middle", "x1", "x2"],
+                   help="Aim only while this mouse button is held (default: left)")
     p.add_argument("--fps", type=int, default=60, help="Cap the aim loop at this FPS (0 = unlimited)")
     p.add_argument("--triggerbot", action="store_true")
     p.add_argument("--trigger-radius", type=int, default=80)
@@ -78,10 +84,12 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         aim_mode=args.aim_mode,
         aim_height=args.aim_height,
         head_height=args.head_height,
+        head_bias=args.head_bias,
         head_width=args.head_width,
         move_fraction=args.move_fraction,
         max_step=args.max_step,
         keybind=args.key,
+        hold_button="" if args.hold_button == "none" else args.hold_button,
         triggerbot=args.triggerbot,
         trigger_radius=args.trigger_radius,
         input_backend=args.input_backend,
@@ -252,8 +260,13 @@ def run(cfg: AimConfig) -> None:
         img, crop_x, crop_y, crop_w, crop_h = capture.grab()
         detections = detector.detect(img, crop_x, crop_y)
         cursor = capture.crosshair()
-        # Always-on by default; pass --key to gate on a held key instead.
-        active = press_key(cfg.keybind) if cfg.keybind else True
+        # Aim only while the hold button is pressed (left mouse by default).
+        if cfg.hold_button:
+            active = mouse_button_down(cfg.hold_button)
+        elif cfg.keybind:
+            active = press_key(cfg.keybind)
+        else:
+            active = True
         target = selector.select(detections, cursor) if active else None
         dist = None
         action = ""
@@ -277,6 +290,8 @@ def run(cfg: AimConfig) -> None:
             status = selector.explain(detections, cursor)
             if action:
                 status = f"{status} | {action}"
+        elif cfg.hold_button:
+            status = f"idle | hold {cfg.hold_button} mouse to aim | detections={len(detections)}"
         elif cfg.keybind:
             ks = key_state(cfg.keybind)
             if ks == -1:

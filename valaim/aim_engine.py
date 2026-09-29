@@ -29,13 +29,13 @@ class AimParams:
     max_step: int = 120
     min_move: float = 2.0
 
-    deadzone: float = 1.5
-    tremor_px: float = 0.6
+    deadzone: float = 3.0
+    tremor_px: float = 0.0
     tremor_freq: float = 8.0
 
-    overshoot_factor: float = 1.06
-    overshoot_error: float = 120.0
-    overshoot_frames: int = 2
+    overshoot_factor: float = 1.0
+    overshoot_error: float = 99999.0
+    overshoot_frames: int = 0
 
     max_segment: int = 127
 

@@ -159,6 +159,31 @@ def press_key(key: str) -> bool:
     return bool(user32.GetAsyncKeyState(_vk(key)) & 0x8000)
 
 
+VK_LBUTTON = 0x01
+VK_RBUTTON = 0x02
+VK_MBUTTON = 0x04
+VK_XBUTTON1 = 0x05
+VK_XBUTTON2 = 0x06
+
+_MOUSE_VK = {
+    "left": VK_LBUTTON,
+    "right": VK_RBUTTON,
+    "middle": VK_MBUTTON,
+    "x1": VK_XBUTTON1,
+    "x2": VK_XBUTTON2,
+}
+
+
+def mouse_button_down(button: str) -> bool:
+    """True while the given physical mouse button is held (read-only)."""
+    if sys.platform != "win32":
+        return False
+    vk = _MOUSE_VK.get(button.lower())
+    if vk is None:
+        raise ValueError(f"Unsupported mouse button: {button}")
+    return bool(user32.GetAsyncKeyState(vk) & 0x8000)
+
+
 def key_state(key: str) -> int:
     """Raw async key state (low 16 bits). 0x8000 = pressed down.
 

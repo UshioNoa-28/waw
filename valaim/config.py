@@ -24,12 +24,14 @@ class AimConfig:
     aim_height: float = 0.30
     head_height: float = 0.10
     head_width: float = 0.16
+    head_bias: float = 0.55
     head_boost: float = 0.35
     min_move: int = 2
     move_fraction: float = 0.65
     max_step: int = 120
 
-    keybind: str = "F8"
+    keybind: str = ""
+    hold_button: str = "left"
     triggerbot: bool = False
     trigger_radius: int = 80
 
