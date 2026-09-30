@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import threading
+import time
 import webbrowser
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,14 @@ from .config import AimConfig
 CONFIG_FILE = "valaim_gui.json"
 HOST = "127.0.0.1"
 PORT = 8765
+
+# Quit when the browser tab says goodbye (pagehide beacon), or as a fallback
+# when its heartbeat stops (browser crash / killed). Background tabs are
+# throttled to ~1 poll/min by browsers, so the idle limit must be well above
+# that to avoid quitting while the user is alt-tabbed into the game.
+IDLE_TIMEOUT_S = 150.0
+
+_session = {"opened": False, "last_seen": 0.0, "bye": False}
 
 
 def _config_path() -> str:
@@ -179,6 +188,7 @@ button{border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:6
 #save{background:#374151;color:#e5e7eb}
 button:disabled{opacity:.4;cursor:default}
 .bar{display:flex;gap:10px;margin:14px 0}
+#quit{background:#3f3f46;color:#fde68a}
 #status{background:var(--card);border-left:3px solid var(--acc);border-radius:6px;padding:10px 12px;font-size:13px;min-height:40px;color:var(--fg)}
 #status.run{border-color:var(--ok)}
 #status.err{border-color:#ef4444}
@@ -221,6 +231,7 @@ button:disabled{opacity:.4;cursor:default}
 <button id="start">启 动</button>
 <button id="stop">停 止</button>
 <button id="save">保 存</button>
+<button id="quit">退出程序</button>
 </div>
 
 <div id="status">加载中...</div>
@@ -282,6 +293,12 @@ document.getElementById("save").onclick=async()=>{
   const t=await(await postp("/save")).text();
   document.getElementById("status").textContent=t==="saved"?"已保存":"保存失败";
 };
+document.getElementById("quit").onclick=async()=>{
+  document.getElementById("status").textContent="已退出,可关闭本页面。";
+  await postp("/bye");
+};
+// Closing this tab/browser tells the exe to quit (beacon survives page unload).
+window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/bye");}catch(e){}});
 poll();
 </script></div></body></html>"""
 
@@ -299,8 +316,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/":
+            _session["opened"] = True
+            _session["last_seen"] = time.time()
             self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
         elif self.path.startswith("/state"):
+            _session["opened"] = True
+            _session["last_seen"] = time.time()
             self._send(200, json.dumps(PANEL.snapshot()).encode("utf-8"), "application/json")
         else:
             self._send(404, b"not found", "text/plain")
@@ -316,6 +337,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/set":
             err = PANEL.apply(patch)
             self._send(400 if err else 200, (err or "ok").encode(), "text/plain")
+        elif self.path == "/bye":
+            # Fired by the page on unload (tab closed / browser closed).
+            _session["bye"] = True
+            self._send(200, b"bye", "text/plain")
         elif self.path == "/start":
             self._send(200, PANEL.start().encode(), "text/plain")
         elif self.path == "/stop":
@@ -327,12 +352,32 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain")
 
 
+def _shutdown(server: ThreadingHTTPServer) -> None:
+    save_config(PANEL.cfg)
+    PANEL.stop_flag.set()
+    print("Panel closed - exiting ValAim.")
+    threading.Thread(target=server.shutdown, daemon=True).start()
+    time.sleep(0.3)
+    os._exit(0)
+
+
+def _watchdog(server: ThreadingHTTPServer) -> None:
+    while True:
+        time.sleep(2.0)
+        if not _session["opened"]:
+            continue
+        gone = _session["bye"] or (time.time() - _session["last_seen"] > IDLE_TIMEOUT_S)
+        if gone:
+            _shutdown(server)
+
+
 def main() -> None:
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     url = f"http://{HOST}:{PORT}"
     print(f"ValAim panel: {url}")
     threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    threading.Thread(target=_watchdog, args=(server,), daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        server.shutdown()
+        _shutdown(server)
