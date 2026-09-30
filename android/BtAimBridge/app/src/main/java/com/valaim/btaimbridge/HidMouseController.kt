@@ -28,6 +28,7 @@ class HidMouseController(
 ) {
     companion object {
         private const val TAG = "HidMouse"
+        private const val KEY_HOST_MAC = "host_mac"
         private val APP_EXECUTOR = Executors.newSingleThreadExecutor { r ->
             Thread(r, "hid-cmd").apply { isDaemon = true }
         }
@@ -39,6 +40,8 @@ class HidMouseController(
 
     private val adapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+
+    private val prefs = context.getSharedPreferences("btaimbridge", Context.MODE_PRIVATE)
 
     private var hidDevice: BluetoothHidDevice? = null
     private var hostDevice: BluetoothDevice? = null
@@ -55,6 +58,7 @@ class HidMouseController(
                 BluetoothProfile.STATE_CONNECTED -> {
                     hostDevice = device
                     connected = true
+                    prefs.edit().putString(KEY_HOST_MAC, device.address).apply()
                     onState("CONNECTED to PC - releasing buttons")
                     // The host may remember a stuck button state from a last
                     // session that ended abruptly; clear it immediately.
@@ -74,7 +78,10 @@ class HidMouseController(
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, isRegistered: Boolean) {
             registered = isRegistered
             if (isRegistered) {
-                onState("HID registered - now pair \"BtAimBridge\" on the PC")
+                onState("HID registered")
+                // Registration is not connection: after the app was killed and
+                // restarted, the host link must be re-established actively.
+                startReconnectLoop()
             } else {
                 connected = false
                 hostDevice = null
@@ -113,6 +120,60 @@ class HidMouseController(
     }
 
     @Volatile private var manualStop = false
+    @Volatile private var reconnecting = false
+
+    /** Re-establish the host link after (re-)registration, with retries. */
+    private fun startReconnectLoop() {
+        if (reconnecting) return
+        reconnecting = true
+        Thread {
+            repeat(10) { attempt ->
+                if (connected || manualStop) {
+                    reconnecting = false
+                    return@Thread
+                }
+                val mac = prefs.getString(KEY_HOST_MAC, null)
+                val hd = hidDevice
+                if (mac != null && hd != null) {
+                    val dev = try {
+                        adapter?.getRemoteDevice(mac)
+                    } catch (_: IllegalArgumentException) {
+                        null
+                    }
+                    if (dev != null) {
+                        try {
+                            val ok = hd.connect(dev)
+                            onState(if (attempt == 0) "Reconnecting to $mac ..." else "reconnect try ${attempt + 1}")
+                        } catch (e: SecurityException) {
+                            onState("Reconnect permission denied")
+                        }
+                    }
+                }
+                try { Thread.sleep(1500) } catch (_: InterruptedException) {}
+            }
+            reconnecting = false
+            if (!connected) {
+                onState("No saved PC - pair \"BtAimBridge\" in Windows settings once")
+            }
+        }.start()
+    }
+
+    /** Manual "reconnect" from the UI. */
+    @SuppressLint("MissingPermission")
+    fun reconnect(): Boolean {
+        val mac = prefs.getString(KEY_HOST_MAC, null) ?: return false
+        val hd = hidDevice ?: return false
+        val dev = try {
+            adapter?.getRemoteDevice(mac)
+        } catch (_: IllegalArgumentException) {
+            null
+        } ?: return false
+        return try {
+            hd.connect(dev)
+        } catch (e: SecurityException) {
+            false
+        }
+    }
 
     @SuppressLint("MissingPermission")
     private fun maybeReregister() {

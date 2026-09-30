@@ -89,6 +89,13 @@
             android:layout_marginTop="12dp"
             android:text="Make discoverable (for pairing)" />
 
+        <Button
+            android:id="@+id/btnReconnect"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Reconnect to last PC" />
+
         <TextView
             android:id="@+id/tvStatus"
             android:layout_width="match_parent"

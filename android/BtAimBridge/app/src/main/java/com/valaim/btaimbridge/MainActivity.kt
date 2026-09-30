@@ -61,6 +61,10 @@ class MainActivity : AppCompatActivity() {
             if (running) stopAll() else requestThenStart()
         }
         findViewById<Button>(R.id.btnDiscover).setOnClickListener { makeDiscoverable() }
+        findViewById<Button>(R.id.btnReconnect).setOnClickListener {
+            val ok = hid.reconnect()
+            setStatus(if (ok) "Reconnecting to last PC..." else "No saved PC - pair once via Make discoverable")
+        }
         findViewById<Button>(R.id.btnRefresh).setOnClickListener {
             tvIp.text = "PC IP: ${localIp()}"
         }
@@ -103,7 +107,7 @@ class MainActivity : AppCompatActivity() {
                     lastY = ev.y
                     if (dx != 0 || dy != 0) {
                         val ok = hid.sendReport(0, dx, dy, 0)
-                        if (!ok) setStatus("touchpad: HID not connected")
+                        if (!ok) setStatus("HID not connected - tap Reconnect")
                     }
                 }
             }
