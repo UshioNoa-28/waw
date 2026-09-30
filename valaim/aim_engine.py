@@ -31,7 +31,8 @@ class AimParams:
     comp_weight: float = 1.0      # fraction of in-flight move pre-subtracted from error
     comp_frames: int = 8          # in-flight window, loop frames
 
-    deadzone: float = 4.0         # stop inside this radius (px), fixed
+    deadzone: float = 4.0         # stop radius (px), fixed mode / fallback
+    dz_frac: float = 0.0          # deadzone = frac of head-box width (0=fixed); clamped 2..12
     arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 10.0       # ...and only resume past this (hysteresis)
     med_win: int = 1              # median filter width on raw error (1=off)
@@ -109,7 +110,8 @@ class AimEngine:
         return self._tx, self._ty
 
     def step(self, dx: float, dy: float,
-             lead_x: float = 0.0, lead_y: float = 0.0) -> tuple[int, int]:
+             lead_x: float = 0.0, lead_y: float = 0.0,
+             box_w: float = 0.0) -> tuple[int, int]:
         """Return a relative mouse step for the current pixel error.
 
         lead_x/lead_y are caller-computed target-motion predictions (px); they
@@ -118,6 +120,9 @@ class AimEngine:
         term unstable here).
         """
         p = self.p
+        dz = p.deadzone
+        if p.dz_frac > 0 and box_w > 0:
+            dz = max(2.0, min(12.0, p.dz_frac * box_w))
 
         # Median filter first: kills single-frame outlier jumps of the box.
         if p.med_win >= 3:
@@ -182,7 +187,7 @@ class AimEngine:
             self._latched = True
             self._carry_x = self._carry_y = 0.0
             return 0, 0
-        if dist <= p.deadzone:
+        if dist <= dz:
             self._carry_x = self._carry_y = 0.0
             return 0, 0
 
@@ -222,7 +227,7 @@ class AimEngine:
         # Speed floor: outside the deadzone never crawl below min_speed,
         # otherwise the final stretch feels sluggish (exponential tail).
         floor = max(0, p.min_speed)
-        if floor and dist > p.deadzone:
+        if floor and dist > dz:
             if abs(ix) < floor and ex != 0:
                 ix = int(math.copysign(floor, ex))
             if abs(iy) < floor and ey != 0:

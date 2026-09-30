@@ -48,6 +48,7 @@ class AimConfig:
     aim_cw: float = 1.0
     smoothing: float = 0.55
     deadzone: float = 4.0
+    aim_dz_frac: float = 0.25
     head_offset_y: float = 0.0
     aim_gain: float = 0.0
     calibrate: bool = False

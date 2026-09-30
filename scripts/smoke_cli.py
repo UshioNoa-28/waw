@@ -13,7 +13,7 @@ COMBOS = [
     ["--humanize", "--arrive-px", "5", "--resume-px", "10", "--med-win", "5",
      "--aim-floor", "2", "--aim-comp", "6", "--aim-cw", "1", "--sens", "0.6",
      "--move-fraction", "0.5", "--max-step", "60", "--smoothing", "0.7",
-     "--deadzone", "4", "--fov", "160", "--key", "ALT", "--bt-test",
+     "--deadzone", "4", "--dz-frac", "0.35", "--fov", "160", "--key", "ALT", "--bt-test",
      "--fire-button", "x1", "--fire-radius", "12", "--head-bias", "0.7",
      "--head-offset-y", "5", "--aim-gain", "1.3", "--aim-lead", "0.12", "--fps", "120",
      "--start-delay", "5"],
@@ -34,6 +34,7 @@ assert c.start_delay >= 0, "delay default missing"
 sys.argv = ["s"] + COMBOS[3]
 c = config_from_args(parse_args())
 assert c.humanize and c.aim_comp == 6 and c.arrive_px == 5.0, "humanize wiring broken"
+assert c.aim_dz_frac == 0.35, "dz-frac wiring broken"
 assert c.start_delay == 5.0, "start-delay wiring broken"
 print("wiring asserts: ok")
 

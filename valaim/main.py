@@ -55,7 +55,8 @@ def parse_args() -> argparse.Namespace:
                    help="Target-motion prediction in seconds (covers actuation latency)")
     p.add_argument("--smoothing", type=float, default=0.55,
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
-    p.add_argument("--deadzone", type=float, default=4.0, help="Stop radius in pixels (fixed, not scaled by target size)")
+    p.add_argument("--deadzone", type=float, default=4.0, help="Fixed stop radius in pixels (used when --dz-frac 0)")
+    p.add_argument("--dz-frac", type=float, default=0.25, help="Deadzone as fraction of head-box width (0=fixed --deadzone)")
     p.add_argument("--aim-gain", type=float, default=0.0,
                    help="Mouse counts per screen pixel (0 = auto from calib file / --sens)")
     p.add_argument("--sens", type=float, default=0.0,
@@ -127,6 +128,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         aim_cw=args.aim_cw,
         smoothing=args.smoothing,
         deadzone=args.deadzone,
+        aim_dz_frac=args.dz_frac,
         aim_gain=args.aim_gain,
         calibrate=args.calibrate,
         sens=args.sens,
@@ -310,6 +312,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             min_move=cfg.min_move,
             smoothing=cfg.smoothing,
             deadzone=cfg.deadzone,
+            dz_frac=cfg.aim_dz_frac,
             arrive_px=cfg.arrive_px,
             resume_px=cfg.resume_px,
             med_win=max(1, cfg.med_win),
@@ -418,6 +421,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.min_move = cfg.min_move
         engine.p.smoothing = cfg.smoothing
         engine.p.deadzone = cfg.deadzone
+        engine.p.dz_frac = cfg.aim_dz_frac
         engine.p.min_speed = cfg.aim_floor
         engine.p.comp_frames = cfg.aim_comp
         engine.p.comp_weight = max(0.0, min(1.0, cfg.aim_cw))
@@ -480,7 +484,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             lx, ly = vel["vx"] * lead, vel["vy"] * lead
 
             if dist > cfg.min_move or trace is not None:
-                mx, my = engine.step(dx, dy, lx, ly) if dist > cfg.min_move else (0, 0)
+                dw = target.det.w * (1.0 if "head" in target.det.name.lower() else 0.45)
+                mx, my = engine.step(dx, dy, lx, ly, dw) if dist > cfg.min_move else (0, 0)
                 if cfg.aim_off:
                     mx = my = 0
                 if trace is not None:
