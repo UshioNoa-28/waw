@@ -74,6 +74,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--resume-px", type=float, default=10.0, help="Unlock output when error exceeds this (px)")
     p.add_argument("--med-win", type=int, default=1, help="Median filter width on detection error (1=off)")
     p.add_argument("--humanize", action="store_true", help="Reaction gate + ramp-in + tremor (human-like onset)")
+    p.add_argument("--aim-floor", type=float, default=2.0, help="Min counts per frame outside deadzone (0=off)")
+    p.add_argument("--aim-comp", type=int, default=6, help="In-flight compensation window, loop frames (0=off)")
+    p.add_argument("--aim-cw", type=float, default=1.0, help="In-flight compensation weight 0..1")
     p.add_argument("--log-aim", action="store_true", help="Record per-frame error+commands to aim_trace.csv")
     p.add_argument("--no-aim", action="store_true", help="Record only: never move the mouse (captures human flicks in-game)")
     p.add_argument("--trace", default="aim_trace.csv", help="Trace csv path for --log-aim")
@@ -143,6 +146,13 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         debug=args.debug,
         max_frames=args.max_frames,
         game_process=args.game_process.strip(),
+        log_aim=args.log_aim,
+        aim_off=args.no_aim,
+        trace_path=args.trace,
+        arrive_px=args.arrive_px,
+        resume_px=args.resume_px,
+        med_win=args.med_win,
+        humanize=args.humanize,
     )
 
 
@@ -305,6 +315,9 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             ramp_s=cfg.ramp_s,
             tremor_px=cfg.tremor_px,
             tremor_hz=cfg.tremor_hz,
+            min_speed=cfg.aim_floor,
+            comp_frames=cfg.aim_comp,
+            comp_weight=cfg.aim_cw,
         )
     )
 
@@ -403,6 +416,9 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.resume_px = cfg.resume_px
         engine.p.med_win = max(1, cfg.med_win)
         engine.p.humanize = cfg.humanize
+        engine.p.min_speed = cfg.aim_floor
+        engine.p.comp_frames = cfg.aim_comp
+        engine.p.comp_weight = max(0.0, min(1.0, cfg.aim_cw))
         img, crop_x, crop_y, crop_w, crop_h = capture.grab()
         detections = detector.detect(img, crop_x, crop_y)
         cursor = capture.crosshair()
