@@ -288,12 +288,12 @@ button:disabled{opacity:.4;cursor:default}
 <script>
 const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","aim_lead","fire_radius","fps"];
 const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0};
-const KEYMAP={"Space":"SPACE","Tab":"TAB","Enter":"ENTER","Escape":"ESC","Minus":"-","Equal":"=","Comma":",","Period":".","Slash":"/","Semicolon":";","Quote":"\'","Backquote":"`","Backslash":"\\","BracketLeft":"[","BracketRight":"]"};
+const KEYMAP={"Space":"SPACE","Tab":"TAB","Enter":"ENTER"};
 function codeToName(code){
   let m;
   if(/^Key([A-Z])$/.test(code)) return RegExp.$1;
   if(/^Digit([0-9])$/.test(code)) return RegExp.$1;
-  if(/^F([1-9]|1[0-6])$/.test(code)) return code;
+  if(/^F([1-9]|1[0-2])$/.test(code)) return code;
   if(code==="ShiftLeft")return"LSHIFT"; if(code==="ShiftRight")return"RSHIFT";
   if(code==="ControlLeft")return"LCTRL"; if(code==="ControlRight")return"RCTRL";
   if(code==="AltLeft")return"ALT"; if(code==="AltRight")return"RALT";
