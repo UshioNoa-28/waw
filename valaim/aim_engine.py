@@ -34,6 +34,9 @@ class AimParams:
     deadzone: float = 4.0         # stop radius (px), fixed mode / fallback
     dz_frac: float = 0.0          # deadzone = frac of head-box width (0=fixed); clamped 2..12
     slew_px: float = 0.0          # if >0, cap per-frame smoothed-target slew to this (px)
+    burst: bool = False           # one full stroke per observation, then silence
+    burst_cooldown: float = 0.15  # s of enforced silence after a burst (>actuation lag)
+    burst_gain: float = 0.95      # fraction of error covered by the single stroke
     arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 10.0       # ...and only resume past this (hysteresis)
     med_win: int = 1              # median filter width on raw error (1=off)
@@ -73,6 +76,7 @@ class AimEngine:
         self._hist = []               # (t, px_x, px_y) commands not yet rendered
         self._raw: list = []          # recent raw errors for median filter
         self._latched = False         # arrived: output suppressed
+        self._burst_t = 0.0
         self._dbg = None              # (smx, smy, inflx, infly, rawx, rawy)
 
     def reset(self) -> None:
@@ -164,10 +168,42 @@ class AimEngine:
             self._sx += a * (dx - self._sx)
             self._sy += a * (dy - self._sy)
 
-        cp0 = max(0.05, p.counts_per_px)
+        # Burst mode: one complete stroke per observation window. During the
+        # cooldown NOTHING is sent, so commands can never stack up while older
+        # ones are still crossing the BT/screenshot lag. This is the structural
+        # cure for the A->B->C signature (measured: chained re-sends during
+        # 70-170ms tails survived every PID/compensation tweak).
+        if p.burst:
+            nowb = time.monotonic()
+            if use_latch and raw_dist <= p.arrive_px:
+                self._latched = True
+                self._carry_x = self._carry_y = 0.0
+                return 0, 0
+            cp0 = max(0.05, p.counts_per_px)
+            sx, sy = dx, dy          # burst uses the FRESH observation, not the
+                                     # jitter-damped EMA (stale EMA is exactly
+                                     # what would stack a second stroke)
+            distb = math.hypot(sx, sy)
+            self._dbg = (sx, sy, 0.0, 0.0, sx, sy)
+            if distb <= dz or (self._burst_t and nowb - self._burst_t < p.burst_cooldown):
+                self._carry_x = self._carry_y = 0.0
+                return 0, 0
+            g = max(0.05, min(1.5, p.burst_gain))
+            bx, by = sx * g * cp0, sy * g * cp0
+            lim = max(1, min(p.max_step, p.max_segment))
+            magb = math.hypot(bx, by)
+            if magb > lim:
+                sc = lim / magb
+                bx, by = bx * sc, by * sc
+            ix, iy = int(round(bx)), int(round(by))
+            if ix or iy:
+                self._burst_t = nowb
+            return ix, iy
+
         # Smith-predictor style compensation: our commands only appear in the
         # screenshot after the loop delay, so subtract everything still in
         # flight; otherwise the loop re-sends moves it already ordered.
+        cp0 = max(0.05, p.counts_per_px)
         now = time.monotonic()
         window = max(1, p.comp_frames or 8) / 60.0
         self._hist = [h for h in self._hist if now - h[0] <= window]
