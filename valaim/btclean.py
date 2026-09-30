@@ -1,12 +1,14 @@
 """PC-side helper: purge stale BtAimBridge device nodes from Windows.
 
-Stale pairing state on the Windows side is a common cause of "pairs then
-instantly disconnects". Removing every PnP node that references BtAimBridge
-before re-pairing guarantees Windows stores fresh keys. (The phone side must
-be unpaired from its own Bluetooth settings - Android forbids third-party
-apps from removing bonds.)
+Windows keeps half-deleted device nodes after repeated pair/unpair cycles;
+those zombies report driver errors and cause "pairs then instantly
+disconnects". This tool:
+  1. lists every BtAimBridge node INCLUDING hidden ones, with its problem code
+  2. removes/uninstalls them all
+  3. reports the Bluetooth adapter's own health
+  4. restarts the Bluetooth Support Service
 
-Run as Administrator:  ValAim.exe --cli --bt-clean
+Run as Administrator:  ValAim.exe --bt-clean
 """
 
 from __future__ import annotations
@@ -16,39 +18,46 @@ import sys
 
 _PS = r"""
 $ErrorActionPreference = 'SilentlyContinue'
-$targets = @(Get-PnpDevice | Where-Object { $_.FriendlyName -match 'BtAimBridge' -or $_.InstanceId -match 'BtAimBridge' })
-if ($targets.Count -eq 0) { Write-Output 'NONE' }
+Write-Output '=== BtAimBridge device nodes (incl. hidden) ==='
+$targets = @(Get-PnpDevice -PresentOnly:$false | Where-Object { $_.FriendlyName -match 'BtAimBridge' -or $_.Name -match 'BtAimBridge' })
+if ($targets.Count -eq 0) { Write-Output '  (none found)' }
 foreach ($d in $targets) {
-    Write-Output ('REMOVING: ' + $d.FriendlyName + '  [' + $d.Class + ']')
-    Remove-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -Uninstall
+    $prob = (Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode').Data
+    Write-Output ('  [{0}] {1}  status={2} problem={3}' -f $d.Class, $d.InstanceId, $d.Status, $prob)
 }
+Write-Output '=== Removing them ==='
+foreach ($d in $targets) {
+    Remove-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -Uninstall | Out-Null
+    Write-Output ('  removed: ' + $d.InstanceId)
+}
+Write-Output '=== Bluetooth adapter health ==='
+Get-PnpDevice -Class Bluetooth -PresentOnly | ForEach-Object {
+    Write-Output ('  {0}  status={1}  problem={2}' -f $_.FriendlyName, $_.Status, (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode').Data)
+}
+Write-Output '=== Restarting Bluetooth service ==='
+Restart-Service bthserv -Force
+Write-Output '  bthserv restarted'
+Write-Output 'DONE'
 """
 
 
 def run() -> int:
-    print("清理 Windows 侧 BtAimBridge 残留设备(需要管理员权限)...")
+    print("扫描并清除 Windows 侧 BtAimBridge 残留设备节点(含隐藏)...")
     try:
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", _PS],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=120,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         print(f"powershell 调用失败: {exc}")
         return 1
-    out = (proc.stdout or "").strip()
-    if not out or out == "NONE":
-        print("Windows 侧没有 BtAimBridge 残留,干净。")
-    else:
-        for line in out.splitlines():
-            print("  " + line)
-    if "Access is denied" in (proc.stderr or ""):
-        print("[!] 权限不足:请用【管理员身份】运行:ValAim.exe --cli --bt-clean")
+    print(proc.stdout or "")
+    if "Access is denied" in (proc.stderr or "") or "拒绝访问" in (proc.stderr or ""):
+        print("[!] 权限不足:请用【管理员身份】运行:ValAim.exe --bt-clean")
         return 1
-    print()
-    print("完成。接下来:")
-    print("  1. 手机:蓝牙设置 → 你的电脑 → 取消配对(手机端唯一要做的)")
-    print("  2. 重启手机(推荐,清蓝牙栈)")
-    print("  3. App START → Make discoverable → Windows 重新配对")
+    print("完成后:")
+    print("  1. 蓝牙开关 关→等5秒→开(或直接重启电脑,更稳)")
+    print("  2. 手机 App 打开 → Make discoverable → Windows 重新配对")
     return 0
 
 

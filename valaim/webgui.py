@@ -91,6 +91,7 @@ class Panel:
         self.running = False
         self.stop_flag = threading.Event()
         self.worker: threading.Thread | None = None
+        self.fix_result = ""
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -98,6 +99,7 @@ class Panel:
             data["target_classes"] = " ".join(self.cfg.target_classes)
             data["status"] = self.status
             data["running"] = self.running
+            data["fix_result"] = self.fix_result
         try:
             from .input_ctrl import raw_input_state
 
@@ -159,6 +161,7 @@ class Panel:
         self.stop_flag.clear()
         self.running = True
         self.status = "启动中..."
+        self.fix_result = ""
         self.worker = threading.Thread(target=self._run, daemon=True)
         self.worker.start()
         return "started"
@@ -202,6 +205,17 @@ class Panel:
 PANEL = Panel()
 
 
+def _run_fix() -> None:
+    try:
+        from .btclean import run
+
+        code = run()
+        PANEL.fix_result = f"修复完成(code={code}),蓝牙开关关5秒再开,然后重新配对" if code == 0 else "修复失败,请用管理员cmd运行 ValAim.exe --cli --bt-clean 看报错"
+    except Exception as exc:  # noqa: BLE001
+        PANEL.fix_result = f"修复出错: {exc}"
+
+
+
 PAGE = """<!doctype html>
 <html><head><meta charset="utf-8"><title>ValAim 控制台</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -226,6 +240,7 @@ button{border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:6
 button:disabled{opacity:.4;cursor:default}
 .bar{display:flex;gap:10px;margin:14px 0}
 #quit{background:#3f3f46;color:#fde68a}
+#fix{background:#7c3aed;color:#ede9fe}
 #status{background:var(--card);border-left:3px solid var(--acc);border-radius:6px;padding:10px 12px;font-size:13px;min-height:40px;color:var(--fg)}
 #status.run{border-color:var(--ok)}
 #status.err{border-color:#ef4444}
@@ -273,6 +288,7 @@ pre{background:#101316;border-radius:6px;padding:8px 10px;color:#9ae6b4;font-fam
 <button id="start">启 动</button>
 <button id="stop">停 止</button>
 <button id="save">保 存</button>
+<button id="fix">配对修复</button>
 <button id="quit">退出程序</button>
 </div>
 
@@ -305,7 +321,7 @@ function fill(s){
     document.getElementById(k+"_v").textContent=(+s[k]).toFixed(DEC[k]??1);
   }
   const st=document.getElementById("status");
-  st.textContent=s.status;
+  st.textContent=s.fix_result||s.status;
   st.className=s.running?"run":(s.status.startsWith("错误")||s.status.startsWith("Error")?"err":"");
   document.getElementById("start").disabled=s.running;
   document.getElementById("stop").disabled=!s.running;
@@ -343,6 +359,11 @@ document.getElementById("stop").onclick=async()=>{
 document.getElementById("save").onclick=async()=>{
   const t=await(await postp("/save")).text();
   document.getElementById("status").textContent=t==="saved"?"已保存":"保存失败";
+};
+document.getElementById("fix").onclick=async()=>{
+  document.getElementById("status").textContent="修复中...需要管理员权限,若失败请用管理员cmd跑 ValAim.exe --cli --bt-clean";
+  const t=await(await postp("/fix")).text();
+  document.getElementById("status").textContent=t;
 };
 document.getElementById("quit").onclick=async()=>{
   document.getElementById("status").textContent="已退出,可关闭本页面。";
@@ -392,6 +413,9 @@ class Handler(BaseHTTPRequestHandler):
             # Fired by the page on unload (tab closed / browser closed).
             _session["bye"] = True
             self._send(200, b"bye", "text/plain")
+        elif self.path == "/fix":
+            threading.Thread(target=_run_fix, daemon=True).start()
+            self._send(200, b"fix started", "text/plain")
         elif self.path == "/start":
             self._send(200, PANEL.start().encode(), "text/plain")
         elif self.path == "/stop":
