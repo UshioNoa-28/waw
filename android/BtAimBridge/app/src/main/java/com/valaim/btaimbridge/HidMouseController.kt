@@ -151,11 +151,9 @@ class HidMouseController(
         }.start()
     }
 
-    /**
-     * Connect candidates: this session's last host, or bonded devices whose
-     * name looks like a computer (DESKTOP-*/LAPTOP-*/...), or the only bonded
-     * device if there is exactly one. Never spray connect() at earbuds etc.
-     */
+    // Connect candidates: this session's last host, or bonded devices whose
+    // name looks like a computer (DESKTOP-, LAPTOP-, etc), or the only bonded
+    // device if there is exactly one. Never spray connect() at earbuds etc.
     @SuppressLint("MissingPermission")
     private fun tryConnectBonded() {
         if (autoConnectPaused) return
