@@ -486,6 +486,10 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 if trace is not None:
                     tt = round(time.monotonic() - t0, 4)
                     trace.writerow(["err", tt, round(dx, 2), round(dy, 2)])
+                    dbg = getattr(engine, "_dbg", None)
+                    if dbg:
+                        trace.writerow(["dbg", tt, round(dbg[0], 1), round(dbg[2], 1),
+                                        round(dbg[1], 1), round(dbg[3], 1)])
                     for d in detections:
                         trace.writerow(["det", tt, round(d.x, 2), round(d.y, 2),
                                         round(d.w, 2), round(d.h, 2), round(d.conf, 3), d.name])

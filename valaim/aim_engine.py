@@ -71,6 +71,7 @@ class AimEngine:
         self._hist = []               # (t, px_x, px_y) commands not yet rendered
         self._raw: list = []          # recent raw errors for median filter
         self._latched = False         # arrived: output suppressed
+        self._dbg = None              # (smx, smy, inflx, infly, rawx, rawy)
 
     def reset(self) -> None:
         self._sx = self._sy = None
@@ -167,6 +168,7 @@ class AimEngine:
         raw_ey = self._sy + lead_y
         ex = raw_ex - infl_x
         ey = raw_ey - infl_y
+        self._dbg = (self._sx, self._sy, infl_x, infl_y, raw_ex, raw_ey)
         # Compensation must never flip the commanded direction: over-estimating
         # the in-flight move shows up as a backward kick that then has to be
         # corrected - the exact "always overshoots outward first" signature.
