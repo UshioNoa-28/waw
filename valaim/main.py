@@ -92,6 +92,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--input-backend", default="auto", choices=["auto", "bt", "sendinput"])
     p.add_argument("--bt-host", default=None, help="Phone IP shown in the BtAimBridge app")
     p.add_argument("--bt-port", type=int, default=47800)
+    p.add_argument("--input-probe", action="store_true", help="List live key/mouse events for 30s to find what buttons actually send, then exit")
     p.add_argument("--bt-test", action="store_true", help="Ignore the model; just drive the mouse in a circle to test the BT link")
     p.add_argument("--bt-test-radius", type=int, default=60)
     p.add_argument("--debug", action="store_true")
@@ -222,6 +223,41 @@ def write_log(path: str, line: str) -> None:
             f.write(f"[{time.strftime('%H:%M:%S')}] {line}\n")
     except OSError:
         pass
+
+
+
+def input_probe_loop() -> None:
+    """30s live event dump: raw-input transitions + async VK scan diff.
+
+    Run this, then press every button you plan to bind. Tells you what the
+    OS actually receives (vendor mice often remap side buttons to keys).
+    """
+    import ctypes
+    from . import rawinput
+    ok = rawinput.start()
+    reason = "" if ok else rawinput.failure_reason()
+    print(f"[probe] raw input sink: {'ACTIVE' if ok else 'OFF (' + reason + ')'}")
+    print("[probe] 30s window - press your side buttons / keys now. Ctrl+C to stop.")
+    user32 = ctypes.windll.user32
+    seen_events: set[str] = set()
+    down_vks: set[int] = set()
+    end = time.time() + 30
+    names = ("left", "right", "middle", "x1", "x2")
+    while time.time() < end:
+        for ev in rawinput.recent_events():
+            if ev not in seen_events:
+                seen_events.add(ev)
+                print(f"[probe] {ev}")
+        cur = {vk for vk in range(1, 256) if user32.GetAsyncKeyState(vk) & 0x8000}
+        for vk in sorted(cur - down_vks):
+            print(f"[probe] ASYNC KEY DOWN vk=0x{vk:02X}")
+        for vk in sorted(down_vks - cur):
+            print(f"[probe] ASYNC KEY UP   vk=0x{vk:02X}")
+        down_vks = cur
+        states = " ".join(f"{n}={int(rawinput.mouse_button_down(n))}" for n in names)
+        print(f"[probe] live {states}", flush=True)
+        time.sleep(0.1)
+    print("[probe] done")
 
 
 def bt_test_loop(cfg: AimConfig) -> None:
@@ -585,6 +621,9 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
 def main() -> None:
     args = parse_args()
     cfg = config_from_args(args)
+    if args.input_probe:
+        input_probe_loop()
+        raise SystemExit(0)
     if args.calibrate_tool:
         from .calibrate import run_calibration
 
