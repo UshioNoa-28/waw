@@ -19,7 +19,8 @@ def run() -> None:
     _ensure_streams()
     argv = sys.argv[1:]
 
-    if "--cli" in argv:
+    _CLI_FLAGS = ("--cli", "--calibrate-tool", "--bt-test", "--bt-clean")
+    if any(a in argv for a in _CLI_FLAGS):
         argv = [a for a in argv if a != "--cli"]
         if not any(a == "--input-backend" or a.startswith("--input-backend=") for a in argv):
             import os

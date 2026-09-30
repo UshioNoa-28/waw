@@ -60,6 +60,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--calib-file", default="", help="Calibration json path (default valaim_calib.json)")
     p.add_argument("--calibrate", action="store_true", help="Runtime probe calibration (last resort)")
     p.add_argument("--calibrate-tool", action="store_true", help="Run offline gain calibration and exit")
+    p.add_argument("--bt-clean", action="store_true", help="Remove stale BtAimBridge devices from Windows and exit (admin)")
     p.add_argument("--calib-countdown", type=float, default=8.0,
                    help="Seconds to switch back to the game before calibration starts")
     p.add_argument("--key", default="none", help="Hold this key to aim (default: none = always on)")
@@ -463,6 +464,10 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
 
 def main() -> None:
     args = parse_args()
+    if args.bt_clean:
+        from .btclean import run as clean_run
+
+        raise SystemExit(clean_run())
     cfg = config_from_args(args)
     if args.calibrate_tool:
         from .calibrate import run_calibration

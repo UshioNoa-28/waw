@@ -91,16 +91,23 @@ class BtBridge:
             return False
 
     def _run(self) -> None:
+        was = False
         while self._running:
             if not self._connected:
                 if not self._connect():
                     time.sleep(1.0)
                     continue
+            if not was:
+                was = True
+                print(f"[bt] link up -> {self.host}:{self.port}")
             try:
                 self._pump()
             except OSError as exc:
                 self._last_error = str(exc)
                 self._drop()
+                if was:
+                    was = False
+                    print(f"[bt] link dropped: {exc}; retrying")
             time.sleep(0)
 
     def _pump(self) -> None:
