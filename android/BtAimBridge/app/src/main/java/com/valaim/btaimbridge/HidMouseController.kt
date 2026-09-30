@@ -142,16 +142,41 @@ class HidMouseController(
     private fun tryConnectBonded() {
         val hd = hidDevice ?: return
         val bonded = try {
-            adapter?.bondedDevices
+            adapter?.bondedDevices?.toList()
         } catch (_: SecurityException) {
             null
         } ?: return
+        if (!bondedListReported && !connected) {
+            bondedListReported = true
+            val names = bonded.joinToString(", ") {
+                try { it.name ?: it.address } catch (_: SecurityException) { it.address }
+            }
+            onState("paired on phone: ${if (names.isEmpty()) "NOTHING - pair it!" else names}")
+        }
         for (dev in bonded) {
             try {
                 hd.connect(dev)
             } catch (_: Exception) {
             }
         }
+    }
+
+    @Volatile private var bondedListReported = false
+
+    /** Hard reset of the app-side registration without touching pairing data. */
+    @SuppressLint("MissingPermission")
+    fun forceReRegister() {
+        bondedListReported = false
+        val dev = hidDevice
+        try { dev?.unregisterApp() } catch (_: Exception) {}
+        registered = false
+        connected = false
+        hostDevice = null
+        manualStop = false
+        Thread {
+            try { Thread.sleep(600) } catch (_: InterruptedException) {}
+            reregister()
+        }.start()
     }
 
     /**

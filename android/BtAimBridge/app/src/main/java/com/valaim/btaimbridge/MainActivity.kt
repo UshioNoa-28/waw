@@ -61,6 +61,17 @@ class MainActivity : AppCompatActivity() {
             if (running) stopAll() else requestThenStart()
         }
         findViewById<Button>(R.id.btnDiscover).setOnClickListener { makeDiscoverable() }
+        findViewById<Button>(R.id.btBtSettings).setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, "无法打开蓝牙设置", Toast.LENGTH_SHORT).show()
+            }
+        }
+        findViewById<Button>(R.id.btnResetHid).setOnClickListener {
+            hid.forceReRegister()
+            setStatus("Resetting HID registration...")
+        }
         findViewById<Button>(R.id.btnRefresh).setOnClickListener {
             tvIp.text = "PC IP: ${localIp()}"
         }
