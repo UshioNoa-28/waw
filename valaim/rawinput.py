@@ -185,7 +185,7 @@ def _run() -> None:
 
 
 def _run_inner() -> None:
-    hinst = user32.GetModuleHandleW(None)
+    hinst = ctypes.windll.kernel32.GetModuleHandleW(None)
 
     WNDPROC = ctypes.WINFUNCTYPE(
         ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM

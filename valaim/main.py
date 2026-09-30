@@ -75,6 +75,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--med-win", type=int, default=1, help="Median filter width on detection error (1=off)")
     p.add_argument("--humanize", action="store_true", help="Reaction gate + ramp-in + tremor (human-like onset)")
     p.add_argument("--log-aim", action="store_true", help="Record per-frame error+commands to aim_trace.csv")
+    p.add_argument("--no-aim", action="store_true", help="Record only: never move the mouse (captures human flicks in-game)")
+    p.add_argument("--trace", default="aim_trace.csv", help="Trace csv path for --log-aim")
     p.add_argument("--triggerbot", action="store_true")
     p.add_argument("--trigger-radius", type=int, default=80)
     p.add_argument("--fire-button", default="none",
@@ -308,11 +310,15 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
 
     print(f"model: {os.path.basename(cfg.model_path)} | provider: {', '.join(detector.session.get_providers())}")
 
-    try:
-        backend = set_backend(cfg.input_backend, bt_host=cfg.bt_host, bt_port=cfg.bt_port)
-    except Exception as exc:
-        print(f"[input] failed to initialise backend '{cfg.input_backend}': {exc}", file=sys.stderr)
-        raise SystemExit(1)
+    if cfg.aim_off:
+        backend = "off"
+        print("[input] --no-aim: recording only, mouse output disabled")
+    else:
+        try:
+            backend = set_backend(cfg.input_backend, bt_host=cfg.bt_host, bt_port=cfg.bt_port)
+        except Exception as exc:
+            print(f"[input] failed to initialise backend '{cfg.input_backend}': {exc}", file=sys.stderr)
+            raise SystemExit(1)
     print(f"Input backend: {backend}")
     if backend == "bt":
         print(f"[input] bt -> {cfg.bt_host}:{cfg.bt_port}")
@@ -367,7 +373,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     if cfg.log_aim:
         import csv as _csv
         t0 = time.monotonic()
-        trace_f = open("aim_trace.csv", "w", newline="", encoding="utf-8")
+        trace_f = open(cfg.trace_path, "w", newline="", encoding="utf-8")
         trace = _csv.writer(trace_f)
         trace.writerow(["kind", "t", "a", "b"])
         trace.writerow(["meta", 0, cfg.aim_gain or cal_gain or 1.0, cfg.fps])
@@ -444,8 +450,10 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             lead = max(0.0, min(0.3, cfg.aim_lead))
             lx, ly = vel["vx"] * lead, vel["vy"] * lead
 
-            if dist > cfg.min_move:
-                mx, my = engine.step(dx, dy, lx, ly)
+            if dist > cfg.min_move or trace is not None:
+                mx, my = engine.step(dx, dy, lx, ly) if dist > cfg.min_move else (0, 0)
+                if cfg.aim_off:
+                    mx = my = 0
                 if trace is not None:
                     tt = round(time.monotonic() - t0, 4)
                     trace.writerow(["err", tt, round(dx, 2), round(dy, 2)])

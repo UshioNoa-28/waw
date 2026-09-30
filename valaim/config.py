@@ -41,6 +41,8 @@ class AimConfig:
     tremor_px: float = 2.2
     tremor_hz: float = 10.0
     log_aim: bool = False
+    aim_off: bool = False
+    trace_path: str = "aim_trace.csv"
     aim_comp: int = 6
     aim_cw: float = 1.0
     smoothing: float = 0.7
