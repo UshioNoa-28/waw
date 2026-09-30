@@ -66,6 +66,24 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupTouchpad()
+
+        // Auto-start once permissions are granted: HID registration must be
+        // live BEFORE pairing, and nobody remembers to press START first.
+        if (hasAllPerms()) {
+            main.postDelayed({ if (!running) startAll() }, 300)
+        }
+    }
+
+    private fun hasAllPerms(): Boolean {
+        val need = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            need += Manifest.permission.BLUETOOTH_CONNECT
+            need += Manifest.permission.BLUETOOTH_SCAN
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            need += Manifest.permission.POST_NOTIFICATIONS
+        }
+        return need.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
     }
 
     private fun setupTouchpad() {

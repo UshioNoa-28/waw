@@ -77,8 +77,73 @@ class HidMouseController(
                 onState("HID registered - now pair \"BtAimBridge\" on the PC")
             } else {
                 connected = false
+                hostDevice = null
                 onState("HID unregistered")
+                // Android sometimes unregisters the app on its own; re-register
+                // so the phone doesn't become pair-then-instantly-drop until a
+                // manual restart.
+                if (!manualStop) {
+                    Thread { maybeReregister() }.start()
+                }
             }
+        }
+
+        // --- control-channel replies: the host needs these during/after
+        // --- connection, otherwise it drops the link right after pairing. ---
+
+        @SuppressLint("MissingPermission")
+        override fun onGetReport(device: BluetoothDevice, type: Byte, id: Byte, bufferSize: Int) {
+            try {
+                val payload = if (type == BluetoothHidDevice.REPORT_TYPE_INPUT && id == 0.toByte())
+                    MouseReport.build(0, 0, 0, 0) else ByteArray(0)
+                hidDevice?.replyReport(device, type, id, payload)
+            } catch (_: Exception) {
+            }
+        }
+
+        override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {}
+
+        override fun onSetProtocol(device: BluetoothDevice, protocol: Byte) {}
+
+        @SuppressLint("MissingPermission")
+        override fun onGetHidDescriptor(device: BluetoothDevice, bufferSize: Int) {
+            try {
+                hidDevice?.replyHidDescriptor(device, 0, MouseReport.hidDescriptor())
+            } catch (_: Exception) {
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun onGetReportDescriptor(device: BluetoothDevice, bufferSize: Int) {
+            try {
+                hidDevice?.replyReportDescriptor(device, MouseReport.DESCRIPTOR)
+            } catch (_: Exception) {
+            }
+        }
+
+        override fun onVirtualCableUnplug(device: BluetoothDevice) {
+            if (hostDevice == device) hostDevice = null
+            connected = false
+            onState("PC unplugged the virtual cable - remove & re-pair if needed")
+        }
+    }
+
+    @Volatile private var manualStop = false
+
+    @SuppressLint("MissingPermission")
+    private fun maybeReregister() {
+        if (manualStop || registered) return
+        onState("Re-registering HID...")
+        try { Thread.sleep(800) } catch (_: InterruptedException) {}
+        if (manualStop || registered) return
+        val dev = hidDevice ?: run { register(); return }
+        val sdp = BluetoothHidDeviceAppSdpSettings(
+            "BtAimBridge", "Bluetooth mouse bridge", "ValAim",
+            BluetoothHidDevice.SUBCLASS1_MOUSE, MouseReport.DESCRIPTOR,
+        )
+        try {
+            dev.registerApp(sdp, null, QOS, APP_EXECUTOR, callback)
+        } catch (_: Exception) {
         }
     }
 
@@ -120,6 +185,7 @@ class HidMouseController(
 
     @SuppressLint("MissingPermission")
     fun register() {
+        manualStop = false
         val a = adapter ?: run { onState("No Bluetooth"); return }
         if (!a.isEnabled) { onState("Turn Bluetooth ON"); return }
         if (!hasPermission()) { onState("Grant Nearby devices permission"); return }
@@ -130,6 +196,7 @@ class HidMouseController(
 
     @SuppressLint("MissingPermission")
     fun unregister() {
+        manualStop = true
         val dev = hidDevice
         try { dev?.unregisterApp() } catch (_: Exception) {}
         hidDevice = null

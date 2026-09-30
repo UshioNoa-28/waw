@@ -62,4 +62,23 @@ object MouseReport {
             bw,
         )
     }
+
+    /**
+     * The 9-byte HID descriptor the host fetches over the control channel
+     * during connection. Without a reply to GET_DESCRIPTOR the host gives up
+     * and disconnects right after pairing ("paired, then instantly gone").
+     */
+    fun hidDescriptor(): ByteArray {
+        val rdLen = DESCRIPTOR.size
+        return byteArrayOf(
+            0x09,                                   // bLength
+            0x21,                                   // bDescriptorType = HID
+            0x11, 0x01,                             // bcdHID 1.11
+            0x00,                                   // bCountryCode
+            0x01,                                   // numDescriptors
+            0x22,                                   // report descriptor
+            (rdLen and 0xFF).toByte(),
+            ((rdLen shr 8) and 0xFF).toByte(),
+        )
+    }
 }
