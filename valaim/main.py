@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--med-win", type=int, default=1, help="Median filter width on detection error (1=off)")
     p.add_argument("--humanize", action="store_true", help="Reaction gate + ramp-in + tremor (human-like onset)")
     p.add_argument("--aim-floor", type=float, default=2.0, help="Min counts per frame outside deadzone (0=off)")
-    p.add_argument("--aim-comp", type=int, default=6, help="In-flight compensation window, loop frames (0=off)")
+    p.add_argument("--aim-comp", type=int, default=4, help="In-flight compensation window, loop frames (0=off)")
     p.add_argument("--aim-cw", type=float, default=1.0, help="In-flight compensation weight 0..1")
     p.add_argument("--log-aim", action="store_true", help="Record per-frame error+commands to aim_trace.csv")
     p.add_argument("--no-aim", action="store_true", help="Record only: never move the mouse (captures human flicks in-game)")
@@ -461,10 +461,13 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             dist = math.hypot(dx, dy)
 
             # Target screen-velocity estimate (px/s) for lead compensation.
+            # Continuity = center distance (Detection objects are recreated
+            # every frame, so id() never matches).
             nowt = time.monotonic()
-            tid = id(target.det)
-            if tid != vel.get("id") or nowt - vel.get("t", 0.0) > 0.4:
-                vel.update(id=tid, x=target.x, y=target.y, t=nowt, vx=0.0, vy=0.0)
+            same = (vel.get("t", 0.0) and nowt - vel["t"] < 0.4
+                    and math.hypot(target.x - vel["x"], target.y - vel["y"]) < 30)
+            if not same:
+                vel.update(x=target.x, y=target.y, t=nowt, vx=0.0, vy=0.0)
                 engine.on_new_lock()
             else:
                 ddt = max(0.008, nowt - vel["t"])

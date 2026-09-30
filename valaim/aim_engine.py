@@ -29,7 +29,7 @@ class AimParams:
     min_move: float = 1.0
     min_speed: float = 2.0        # counts/frame floor outside the deadzone
     comp_weight: float = 1.0      # fraction of in-flight move pre-subtracted from error
-    comp_frames: int = 3          # assumed in-flight window, in loop frames
+    comp_frames: int = 4          # assumed in-flight window, in loop frames
 
     deadzone: float = 8.0         # stop inside this radius (px)
     arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
@@ -84,6 +84,12 @@ class AimEngine:
         """Caller signals a fresh target (or a re-acquire after a gap)."""
         self._lock_at = time.monotonic()
         self._latched = False
+        # Stale in-flight history / smoothing state from the PREVIOUS target
+        # makes the first command point the wrong way ("甩出去再回来").
+        self._hist = []
+        self._raw = []
+        self._carry_x = self._carry_y = 0.0
+        self._sx = self._sy = None
         lo = min(self.p.react_ms) / 1000.0
         hi = max(self.p.react_ms) / 1000.0
         self._gate = self._rng.uniform(lo, hi) if self.p.humanize else 0.0
@@ -157,8 +163,17 @@ class AimEngine:
         w = max(0.0, min(1.0, p.comp_weight))
         infl_x = w * sum(h[1] for h in self._hist)
         infl_y = w * sum(h[2] for h in self._hist)
-        ex = self._sx + lead_x - infl_x
-        ey = self._sy + lead_y - infl_y
+        raw_ex = self._sx + lead_x
+        raw_ey = self._sy + lead_y
+        ex = raw_ex - infl_x
+        ey = raw_ey - infl_y
+        # Compensation must never flip the commanded direction: over-estimating
+        # the in-flight move shows up as a backward kick that then has to be
+        # corrected - the exact "always overshoots outward first" signature.
+        if raw_ex * ex < 0:
+            ex = 0.0
+        if raw_ey * ey < 0:
+            ey = 0.0
         dist = math.hypot(self._sx, self._sy)
 
         if use_latch and raw_dist <= p.arrive_px:
