@@ -19,6 +19,7 @@ from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .config import AimConfig
+from .resources import resolve_model_path
 
 CONFIG_FILE = "valaim_gui.json"
 HOST = "127.0.0.1"
@@ -55,6 +56,12 @@ def load_config() -> AimConfig:
                     setattr(cfg, k, v)
         except (OSError, ValueError):
             pass
+    # Frozen exe: a relative model path must be resolved to the bundled copy
+    # (PyInstaller unpacks datas to a temp dir), otherwise onnxruntime fails
+    # with NO_SUCHFILE because the CWD has no models/ folder.
+    cfg.model_path = resolve_model_path(cfg.model_path)
+    if cfg.model_info:
+        cfg.model_info = resolve_model_path(cfg.model_info)
     return cfg
 
 
@@ -125,6 +132,10 @@ class Panel:
             return "已经在运行"
         if not self.cfg.bt_host:
             return "请先填写手机 IP"
+        path = resolve_model_path(self.cfg.model_path)
+        if not os.path.exists(path):
+            return f"模型文件不存在: {self.cfg.model_path}"
+        self.cfg.model_path = path
         self.stop_flag.clear()
         self.running = True
         self.status = "启动中..."

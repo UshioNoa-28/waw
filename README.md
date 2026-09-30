@@ -1,6 +1,8 @@
 # ValAim
 
-External Valorant aimbot: captures the screen around the crosshair, runs a YOLO model through ONNX Runtime, and moves the mouse via either a virtual HID device (bypasses Vanguard's synthetic-input filter) or the legacy `SendInput` path.
+External Valorant aimbot: captures the screen around the crosshair, runs a YOLO detector through ONNX Runtime, and moves the mouse through a **phone acting as a Bluetooth HID mouse** (bypasses Vanguard's synthetic-input filter with no kernel driver and no extra hardware).
+
+Launch `ValAim.exe` and a browser control panel opens at `http://127.0.0.1:8765` with live sliders for every parameter (they apply while running, no restart). Console mode still works: `ValAim.exe --cli ...`.
 
 It supports:
 
@@ -43,15 +45,14 @@ uv sync --extra export
 
 ## Models
 
-The default model is a **YOLO11n** detector with two classes, `enemy` and `enemy_head`, so head and body are genuinely distinguished and only enemies are targeted. It is bundled in `models/yolo11n_valorant_head_body/`.
+The default model is a **YOLOv8n** detector with two classes, `Body` and `Head`, bundled in `models/valorant_head_body/`. Source: `AustinBao/DetectValorantAgent` (trained on 5500+ custom images, mAP50 ≈ 0.92), exported to ONNX. The aim point defaults to the Head box; only heads are targeted when classes = `Head`.
 
-Source: `tutoudelihua/AI_assisted_auto_aiming` (`model/yolo11n_valorant_head_body.onnx`, already ONNX, no export needed). It is based on the Roboflow dataset `brolikeshooting/valorant-object-detection2-yuw86` (classes `enemyBody`, `enemyHead`).
-
-Other useful public models (trade-offs):
+Older bundled alternatives (trade-offs):
 
 | Model | Classes | Notes |
 |---|---|---|
-| `yolo11n_valorant_head_body` | `enemy`, `enemy_head` | **default**, lightweight, head + body |
+| `valorant_head_body` | `Body`, `Head` | **default**, head + body, mAP50 ~0.92 |
+| `yolo11n_valorant_head_body` | `enemy`, `enemy_head` | lightweight alternative, head + body |
 | `jparedesDS/valorant-yolo11m` | `Body`, `Head` | gated, heavier (67.7 GFLOPs), no team filter |
 | `keremberke/yolov8s-valorant-detection` | `enemy`, `teammate`, spikes | best mAP (0.971) but **no head class** |
 
@@ -93,10 +94,10 @@ AMD iGPU example:
 
 ```bash
 uv run --extra amd python -m valaim.main \
-  --model models/yolo11n_valorant_head_body/model.onnx \
-  --model-info models/yolo11n_valorant_head_body/model.json \
+  --model models/valorant_head_body/model.onnx \
+  --model-info models/valorant_head_body/model.json \
   --backend amd \
-  --classes enemy enemy_head \
+  --classes Head \
   --fov 250 \
   --conf 0.35 \
   --debug
@@ -106,10 +107,10 @@ NVIDIA CUDA example:
 
 ```bash
 uv run --extra cuda python -m valaim.main \
-  --model models/yolo11n_valorant_head_body/model.onnx \
-  --model-info models/yolo11n_valorant_head_body/model.json \
+  --model models/valorant_head_body/model.onnx \
+  --model-info models/valorant_head_body/model.json \
   --backend cuda \
-  --classes enemy enemy_head \
+  --classes Head \
   --fov 250 \
   --debug
 ```
@@ -118,16 +119,16 @@ TensorRT example:
 
 ```bash
 uv run --extra cuda python -m valaim.main \
-  --model models/yolo11n_valorant_head_body/model.onnx \
+  --model models/valorant_head_body/model.onnx \
   --backend tensorrt \
-  --classes enemy enemy_head
+  --classes Head
 ```
 
 CPU fallback:
 
 ```bash
 uv run --extra cpu python -m valaim.main \
-  --model models/yolo11n_valorant_head_body/model.onnx \
+  --model models/valorant_head_body/model.onnx \
   --backend cpu
 ```
 
@@ -146,7 +147,7 @@ uv run --extra cpu python -m valaim.main \
 --fov 250                   Maximum distance from crosshair to target
 --conf 0.35                 Confidence threshold
 --iou 0.45                  NMS IoU threshold
---classes enemy enemy_head  Only target these class names
+--classes Head  Only target these class names
 --exclude-classes teammate  Ignore these class names
 --aim-mode head             Aim point: head, head_wide, or body
 --aim-height 0.30           Aim at this fraction down the box (body mode)

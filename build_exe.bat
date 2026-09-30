@@ -19,9 +19,8 @@ if not "%~1"=="--inner" (
 REM ============================================================
 REM  ValAim - Windows build
 REM
-REM  [1/3] Python venv + deps
-REM  [2/3] ValAim.exe (PyInstaller)
-REM  [3/3] Stage into dist\ValAim\
+REM  [1/2] Python venv + deps
+REM  [2/2] ValAim.exe (PyInstaller, one file, in dist\)
 REM
 REM  ONNX Runtime backend: cpu, amd, or cuda.
 REM  Do NOT install more than one onnxruntime variant at a time.
@@ -33,7 +32,7 @@ if errorlevel 1 goto :error_cd
 
 set "ROOT=%~dp0"
 set "DIST=%ROOT%dist"
-set "STAGE=%DIST%\ValAim"
+set "EXE=%DIST%\ValAim.exe"
 
 echo.
 echo ================================================
@@ -41,10 +40,15 @@ echo          ValAim Windows Build
 echo ================================================
 echo.
 
+REM Remove stale output from older builds (this used to leave a second,
+REM duplicated exe inside dist\ValAim\).
+if exist "%DIST%" rmdir /s /q "%DIST%"
+if exist "%ROOT%build" rmdir /s /q "%ROOT%build"
+
 REM ==================================================
-REM [1/3] Python environment
+REM [1/2] Python environment
 REM ==================================================
-echo [1/3] Preparing Python environment...
+echo [1/2] Preparing Python environment...
 
 if exist ".venv\Scripts\python.exe" goto :venv_ready
 
@@ -86,33 +90,24 @@ if errorlevel 1 goto :error_deps
 echo.
 
 REM ==================================================
-REM [2/3] ValAim.exe
+REM [2/2] ValAim.exe
 REM ==================================================
-echo [2/3] Building ValAim.exe...
+echo [2/2] Building ValAim.exe...
 if not exist "valaim.spec" goto :error_spec
 "%PYEXE%" -m PyInstaller "valaim.spec" --noconfirm --clean
 if errorlevel 1 goto :error_build
-echo.
-
-REM ==================================================
-REM [3/3] Stage
-REM ==================================================
-echo [3/3] Staging into dist\ValAim\...
-if exist "%STAGE%" rmdir /s /q "%STAGE%"
-mkdir "%STAGE%" 2>nul
-copy /y "%DIST%\ValAim.exe" "%STAGE%\ValAim.exe" >nul
-if errorlevel 1 goto :error_stage
-echo   - exe : %STAGE%\ValAim.exe
+if not exist "%EXE%" goto :error_exe
 
 echo.
 echo ================================================
 echo Build completed successfully.
 echo.
-echo Run (Bluetooth phone input):
-echo   %STAGE%\ValAim.exe --input-backend bt --bt-host YOUR_PHONE_IP
+echo Output (this is the ONLY exe):
+echo   %EXE%
 echo.
-echo   Add --bt-test to draw circles and verify the link.
-echo   Add --debug for the detection preview window.
+echo Double-click it to open the control panel in your browser.
+echo Optional console mode:
+echo   "%EXE%" --cli --input-backend bt --bt-host YOUR_PHONE_IP --debug
 echo ================================================
 echo.
 pause
@@ -149,7 +144,7 @@ echo [error] PyInstaller build failed.
 pause
 exit /b 1
 
-:error_stage
-echo [error] Could not copy dist\ValAim.exe.
+:error_exe
+echo [error] Build succeeded but dist\ValAim.exe is missing.
 pause
 exit /b 1
