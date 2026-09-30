@@ -92,11 +92,20 @@ class BtBridge:
 
     def _run(self) -> None:
         was = False
+        fails = 0
         while self._running:
             if not self._connected:
                 if not self._connect():
+                    fails += 1
+                    # Never silently talk to an empty address (typo'd IP is a
+                    # classic - shout after ~5s, then every 30s).
+                    if fails == 5 or fails % 30 == 0:
+                        print(f"[bt] cannot reach {self.host}:{self.port} "
+                              f"({self._last_error}) - check the phone IP and that the app shows START",
+                              file=sys.stderr)
                     time.sleep(1.0)
                     continue
+            fails = 0
             if not was:
                 was = True
                 print(f"[bt] link up -> {self.host}:{self.port}")
