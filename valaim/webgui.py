@@ -382,13 +382,41 @@ def _watchdog(server: ThreadingHTTPServer) -> None:
             _shutdown(server)
 
 
-def main() -> None:
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    url = f"http://{HOST}:{PORT}"
-    print(f"ValAim panel: {url}")
-    threading.Timer(0.4, lambda: webbrowser.open(url)).start()
-    threading.Thread(target=_watchdog, args=(server,), daemon=True).start()
+def _fatal(message: str) -> None:
+    """Show a startup failure to the user even in windowed (no-console) mode."""
+    print(message, file=sys.stderr)
     try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(0, message, "ValAim", 0x10)
+    except Exception:
+        pass
+
+
+def main() -> None:
+    try:
+        server = None
+        port = 0
+        for candidate in range(PORT, PORT + 12):
+            try:
+                server = ThreadingHTTPServer((HOST, candidate), Handler)
+                port = candidate
+                break
+            except OSError:
+                continue
+        if server is None:
+            _fatal(
+                f"无法启动控制面板:端口 {PORT}-{PORT + 11} 都被占用。\n"
+                "很可能有一个旧的 ValAim.exe 还在后台运行。\n\n"
+                "解决办法:打开任务管理器,结束所有 ValAim.exe 进程后重新打开。"
+            )
+            return
+        url = f"http://{HOST}:{port}"
+        print(f"ValAim panel: {url}")
+        threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+        threading.Thread(target=_watchdog, args=(server,), daemon=True).start()
         server.serve_forever()
     except KeyboardInterrupt:
         _shutdown(server)
+    except Exception as exc:  # noqa: BLE001
+        _fatal(f"控制面板启动失败: {exc}")
