@@ -49,13 +49,13 @@ def parse_args() -> argparse.Namespace:
                    help="Vertical aim point inside a head box (0=top, 1=bottom; default 0.55)")
     p.add_argument("--head-offset-y", type=float, default=0.0,
                    help="Extra downward aim offset in capture pixels (use if it aims too high)")
-    p.add_argument("--move-fraction", type=float, default=0.2)
+    p.add_argument("--move-fraction", type=float, default=0.7)
     p.add_argument("--max-step", type=int, default=45, help="Max counts moved per frame (slew limit)")
     p.add_argument("--aim-lead", type=float, default=0.1,
                    help="Target-motion prediction in seconds (covers actuation latency)")
     p.add_argument("--smoothing", type=float, default=0.55,
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
-    p.add_argument("--deadzone", type=float, default=8.0, help="Stop radius in pixels")
+    p.add_argument("--deadzone", type=float, default=11.0, help="Stop radius in pixels")
     p.add_argument("--aim-gain", type=float, default=0.0,
                    help="Mouse counts per screen pixel (0 = auto from calib file / --sens)")
     p.add_argument("--sens", type=float, default=0.0,
@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--med-win", type=int, default=1, help="Median filter width on detection error (1=off)")
     p.add_argument("--humanize", action="store_true", help="Reaction gate + ramp-in + tremor (human-like onset)")
     p.add_argument("--aim-floor", type=float, default=2.0, help="Min counts per frame outside deadzone (0=off)")
-    p.add_argument("--aim-comp", type=int, default=4, help="In-flight compensation window, loop frames (0=off)")
+    p.add_argument("--aim-comp", type=int, default=6, help="In-flight compensation window, loop frames (0=off)")
     p.add_argument("--aim-cw", type=float, default=1.0, help="In-flight compensation weight 0..1")
     p.add_argument("--log-aim", action="store_true", help="Record per-frame error+commands to aim_trace.csv")
     p.add_argument("--no-aim", action="store_true", help="Record only: never move the mouse (captures human flicks in-game)")

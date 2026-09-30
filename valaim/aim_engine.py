@@ -29,9 +29,9 @@ class AimParams:
     min_move: float = 1.0
     min_speed: float = 2.0        # counts/frame floor outside the deadzone
     comp_weight: float = 1.0      # fraction of in-flight move pre-subtracted from error
-    comp_frames: int = 4          # assumed in-flight window, in loop frames
+    comp_frames: int = 6          # assumed in-flight window, in loop frames
 
-    deadzone: float = 8.0         # stop inside this radius (px)
+    deadzone: float = 11.0        # stop inside this radius (px)
     arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 10.0       # ...and only resume past this (hysteresis)
     med_win: int = 1              # median filter width on raw error (1=off)
