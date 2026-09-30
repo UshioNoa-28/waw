@@ -98,7 +98,16 @@ class Panel:
             data["target_classes"] = " ".join(self.cfg.target_classes)
             data["status"] = self.status
             data["running"] = self.running
-            return data
+        try:
+            from .input_ctrl import raw_input_state
+
+            active, events = raw_input_state()
+            data["raw_sink"] = active
+            data["events"] = events
+        except Exception:
+            data["raw_sink"] = False
+            data["events"] = []
+        return data
 
     def apply(self, patch: dict) -> str | None:
         with self.lock:
@@ -215,6 +224,7 @@ button:disabled{opacity:.4;cursor:default}
 #status.run{border-color:var(--ok)}
 #status.err{border-color:#ef4444}
 .hint{color:var(--mut);font-size:12px;margin-top:4px}
+pre{background:#101316;border-radius:6px;padding:8px 10px;color:#9ae6b4;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:180px;overflow:auto;margin:8px 0 0}
 </style></head><body><div class="wrap">
 <h1>ValAim 控制台</h1>
 
@@ -262,6 +272,11 @@ button:disabled{opacity:.4;cursor:default}
 
 <div id="status">加载中...</div>
 
+<div class="card" style="margin-top:12px"><h2>输入诊断</h2>
+<div class="hint" id="rawinfo">检测中...</div>
+<pre id="events">按任意鼠标键/键盘键,这里应实时出现 DOWN/UP;进游戏按住侧键看是否还有事件 = 是否被吞</pre>
+</div>
+
 <script>
 const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","fire_radius","fps"];
 const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0,fire_radius:0};
@@ -288,6 +303,10 @@ function fill(s){
   st.className=s.running?"run":(s.status.startsWith("错误")||s.status.startsWith("Error")?"err":"");
   document.getElementById("start").disabled=s.running;
   document.getElementById("stop").disabled=!s.running;
+  const ri=document.getElementById("rawinfo");
+  if(ri) ri.textContent=s.raw_sink?"RawInput 监听:运行中(游戏焦点下也能读到按键)":"RawInput 监听:未启用,回退 GetAsyncKeyState";
+  const ev=document.getElementById("events");
+  if(ev&&s.events) ev.textContent=s.events.length?s.events.join("\n"):"(还没有收到任何按键事件)";
 }
 async function poll(){
   try{ fill(await(await fetch("/state")).json()); }

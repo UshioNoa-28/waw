@@ -15,6 +15,7 @@ from __future__ import annotations
 import ctypes
 import sys
 import threading
+import time
 from ctypes import wintypes
 
 WM_INPUT = 0x00FF
@@ -104,6 +105,13 @@ class _State:
         self.buttons: set[str] = set()
         self.keys: set[int] = set()
         self.ok = False
+        self.events: list[str] = []
+
+    def _log(self, text: str) -> None:
+        # Keep a short ring of recent events for the GUI diagnostics panel.
+        self.events.append(f"{time.strftime('%H:%M:%S')} {text}")
+        if len(self.events) > 60:
+            del self.events[:-30]
 
     def mouse_down(self, name: str) -> bool:
         with self.lock:
@@ -113,8 +121,12 @@ class _State:
         with self.lock:
             return int(vk) in self.keys
 
+    def recent(self) -> list[str]:
+        with self.lock:
+            return list(reversed(self.events[-12:]))
 
-_state = _State()
+
+_state = _state = _State()
 _started = False
 _thread: threading.Thread | None = None
 _proc_ref = None
@@ -146,6 +158,11 @@ def mouse_button_down(name: str) -> bool:
 
 def key_down(vk: int) -> bool:
     return _state.key_down(vk)
+
+
+def recent_events() -> list[str]:
+    """Most recent key/button transitions, newest first."""
+    return _state.recent()
 
 
 def _run() -> None:
@@ -231,11 +248,13 @@ def _handle_input(lparam):
             return
         with _state.lock:
             for bit, name in MOUSE_DOWN.items():
-                if flags & bit:
+                if flags & bit and name not in _state.buttons:
                     _state.buttons.add(name)
+                    _state._log(f"{name.upper()} DOWN")
             for bit, name in MOUSE_UP.items():
-                if flags & bit:
+                if flags & bit and name in _state.buttons:
                     _state.buttons.discard(name)
+                    _state._log(f"{name.upper()} UP")
     elif dw_type == RIM_TYPEKEYBOARD:
         # RAWKEYBOARD: MakeCode(0) Flags(2) Reserved(4) VKey(6) Message(8)
         kb_flags = int.from_bytes(raw[_HEADER + 2: _HEADER + 4], "little")
@@ -244,7 +263,9 @@ def _handle_input(lparam):
             return
         make = not (kb_flags & 0x03)
         with _state.lock:
-            if make:
+            if make and vk not in _state.keys:
                 _state.keys.add(vk)
-            else:
+                _state._log(f"KEY 0x{vk:02X} DOWN")
+            elif not make and vk in _state.keys:
                 _state.keys.discard(vk)
+                _state._log(f"KEY 0x{vk:02X} UP")

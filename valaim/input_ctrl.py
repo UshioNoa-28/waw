@@ -81,13 +81,19 @@ def get_cursor_pos() -> tuple[int, int]:
 _BACKEND = "auto"
 _BT = None
 _RAW = None
+_RAW_TRIED = False
 
 
 def _ensure_raw_input() -> None:
     """Start the raw input sink thread (Windows). Safe to call repeatedly."""
-    global _RAW
-    if _RAW is not None or sys.platform != "win32":
+    global _RAW, _RAW_TRIED
+    if sys.platform != "win32":
         return
+    if _RAW is not None:
+        return
+    if globals().get("_RAW_TRIED"):
+        return
+    _RAW_TRIED = True
     try:
         from . import rawinput as _ri
 
@@ -98,6 +104,14 @@ def _ensure_raw_input() -> None:
             print("[input] raw input sink unavailable; falling back to GetAsyncKeyState", file=sys.stderr)
     except Exception as exc:
         print(f"[input] raw input init failed ({exc})", file=sys.stderr)
+
+
+def raw_input_state() -> tuple[bool, list[str]]:
+    """(active, recent events). Starts the sink on first call."""
+    _ensure_raw_input()
+    if _RAW is None:
+        return False, []
+    return True, _RAW.recent_events()
 
 
 def set_backend(name: str, bt_host: str | None = None, bt_port: int = 47800) -> str:
