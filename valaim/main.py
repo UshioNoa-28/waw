@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
                    help="Extra downward aim offset in capture pixels (use if it aims too high)")
     p.add_argument("--move-fraction", type=float, default=0.7)
     p.add_argument("--max-step", type=int, default=45, help="Max counts moved per frame (slew limit)")
-    p.add_argument("--aim-lead", type=float, default=0.1,
+    p.add_argument("--aim-lead", type=float, default=0.0,
                    help="Target-motion prediction in seconds (covers actuation latency)")
     p.add_argument("--smoothing", type=float, default=0.55,
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
@@ -475,11 +475,16 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 engine.on_new_lock()
             else:
                 ddt = max(0.008, nowt - vel["t"])
-                raw_vx = (target.x - vel["x"]) / ddt
-                raw_vy = (target.y - vel["y"]) / ddt
-                vel["vx"] = 0.7 * vel["vx"] + 0.3 * raw_vx
-                vel["vy"] = 0.7 * vel["vy"] + 0.3 * raw_vy
-                vel.update(x=target.x, y=target.y, t=nowt)
+                dxj = target.x - vel["x"]
+                dyj = target.y - vel["y"]
+                if math.hypot(dxj, dyj) > 12 and ddt < 0.1:
+                    pass  # single-frame point jump = detection noise, keep velocity
+                else:
+                    raw_vx = dxj / ddt
+                    raw_vy = dyj / ddt
+                    vel["vx"] = 0.7 * vel["vx"] + 0.3 * raw_vx
+                    vel["vy"] = 0.7 * vel["vy"] + 0.3 * raw_vy
+                    vel.update(x=target.x, y=target.y, t=nowt)
             lead = max(0.0, min(0.3, cfg.aim_lead))
             lx, ly = vel["vx"] * lead, vel["vy"] * lead
 

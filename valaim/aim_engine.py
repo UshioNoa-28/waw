@@ -33,6 +33,7 @@ class AimParams:
 
     deadzone: float = 4.0         # stop radius (px), fixed mode / fallback
     dz_frac: float = 0.0          # deadzone = frac of head-box width (0=fixed); clamped 2..12
+    slew_px: float = 0.0          # if >0, cap per-frame smoothed-target slew to this (px)
     arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 10.0       # ...and only resume past this (hysteresis)
     med_win: int = 1              # median filter width on raw error (1=off)
@@ -153,9 +154,13 @@ class AimEngine:
             # In-game head-box jitter has p90 ~22px single-frame jumps while
             # real motion is gradual: trust big one-frame jumps slowly, so the
             # crosshair does not chase detection noise (measured data).
-            jump = max(abs(dx - self._sx), abs(dy - self._sy))
+            jx, jy = dx - self._sx, dy - self._sy
+            jump = math.hypot(jx, jy)
             if jump > 12.0:
                 a *= 0.25
+            if p.slew_px > 0 and jump > p.slew_px:
+                k = p.slew_px / jump
+                dx, dy = self._sx + jx * k, self._sy + jy * k
             self._sx += a * (dx - self._sx)
             self._sy += a * (dy - self._sy)
 
@@ -228,10 +233,14 @@ class AimEngine:
         # otherwise the final stretch feels sluggish (exponential tail).
         floor = max(0, p.min_speed)
         if floor and dist > dz:
-            if abs(ix) < floor and ex != 0:
-                ix = int(math.copysign(floor, ex))
-            if abs(iy) < floor and ey != 0:
-                iy = int(math.copysign(floor, ey))
+            mag0 = math.hypot(ix, iy)
+            if 0.0 < mag0 < floor:
+                s_ = floor / mag0
+                ix, iy = int(round(ix * s_)), int(round(iy * s_))
+            elif mag0 == 0.0 and (ex != 0.0 or ey != 0.0):
+                em = math.hypot(ex, ey) or 1.0
+                ix = int(round(floor * ex / em))
+                iy = int(round(floor * ey / em))
 
         self._carry_x = step_x - ix if abs(step_x) >= floor or ix == 0 else 0.0
         self._carry_y = step_y - iy if abs(step_y) >= floor or iy == 0 else 0.0

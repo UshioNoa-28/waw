@@ -29,7 +29,7 @@ class AimConfig:
     min_move: int = 2
     move_fraction: float = 0.5
     max_step: int = 60
-    aim_lead: float = 0.1
+    aim_lead: float = 0.0
     aim_floor: float = 2.0
     arrive_px: float = 0.0     # 0 = latch off (hurt feel in-game)
     resume_px: float = 10.0
