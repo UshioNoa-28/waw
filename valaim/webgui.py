@@ -239,8 +239,7 @@ button:disabled{opacity:.4;cursor:default}
 
 <div class="card"><h2>手机(蓝牙 HID 桥接)</h2>
 <div class="row"><label>手机 IP(看 App 显示)</label><input type=text id="bt_host" size=16>
-<label style="flex:0 0 auto">端口</label><input type=text id="bt_port" size=7>
-<button id="btnUsb" style="padding:6px 10px">USB线(adb)</button></div>
+<label style="flex:0 0 auto">端口</label><input type=text id="bt_port" size=7></div>
 <div class="hint">手机打开 BtAimBridge,点 START,在 Windows 蓝牙里配对,然后把 App 显示的 IP 填进来。</div>
 </div>
 
@@ -401,11 +400,6 @@ document.getElementById("start").onclick=async()=>{
   document.getElementById("status").textContent=t==="started"?"启动中...":("错误: "+t);
 };
 document.getElementById("stop").onclick=async()=>{ await postp("/stop"); };
-document.getElementById("btnUsb").onclick=async()=>{
-  const t=await(await postp("/usb")).text();
-  document.getElementById("status").textContent=t;
-  if(t.startsWith("USB")){ const el=document.getElementById("bt_host"); if(el) el.value="127.0.0.1"; }
-};
 document.getElementById("save").onclick=async()=>{
   const t=await(await postp("/save")).text();
   document.getElementById("status").textContent=t==="saved"?"已保存":"保存失败";
@@ -419,26 +413,6 @@ window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/bye");}catch(
 poll();
 </script></div></body></html>"""
 
-
-def _setup_adb(port: int) -> str:
-    """adb forward tcp:PORT tcp:PORT -> phone app reachable at 127.0.0.1:PORT."""
-    import shutil
-    import subprocess
-
-    adb = shutil.which("adb")
-    if not adb:
-        return "没找到 adb:安装 Android platform-tools 并加入 PATH(https://developer.android.com/tools/releases/platform-tools)"
-    try:
-        subprocess.run([adb, "start-server"], capture_output=True, timeout=15)
-        r = subprocess.run([adb, "forward", f"tcp:{port}", f"tcp:{port}"],
-                           capture_output=True, text=True, timeout=15)
-        if r.returncode != 0:
-            return f"adb forward 失败:{(r.stderr or r.stdout).strip()[:120]}(检查 USB 调试已开、已授权此电脑)"
-        PANEL.cfg.bt_host = "127.0.0.1"
-        PANEL.cfg.bt_port = int(port)
-        return f"USB 隧道已建立:127.0.0.1:{port} -> 手机 App,直接点启动即可"
-    except Exception as exc:
-        return f"adb 调用异常: {exc}"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -477,8 +451,6 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/bye":
             _session["bye"] = True
             self._send(200, b"bye", "text/plain")
-        elif self.path == "/usb":
-            self._send(200, _setup_adb(PANEL.cfg.bt_port).encode("utf-8"), "text/plain")
         elif self.path == "/start":
             self._send(200, PANEL.start().encode(), "text/plain")
         elif self.path == "/stop":

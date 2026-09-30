@@ -31,7 +31,7 @@ class AimParams:
     comp_weight: float = 1.0      # fraction of in-flight move pre-subtracted from error
     comp_frames: int = 3          # assumed in-flight window, in loop frames
 
-    deadzone: float = 4.0         # stop inside this radius (px)
+    deadzone: float = 8.0         # stop inside this radius (px)
     arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 10.0       # ...and only resume past this (hysteresis)
     med_win: int = 1              # median filter width on raw error (1=off)
@@ -138,6 +138,12 @@ class AimEngine:
             self._sx, self._sy = dx, dy
         else:
             a = max(0.05, min(1.0, p.smoothing))
+            # In-game head-box jitter has p90 ~22px single-frame jumps while
+            # real motion is gradual: trust big one-frame jumps slowly, so the
+            # crosshair does not chase detection noise (measured data).
+            jump = max(abs(dx - self._sx), abs(dy - self._sy))
+            if jump > 12.0:
+                a *= 0.25
             self._sx += a * (dx - self._sx)
             self._sy += a * (dy - self._sy)
 

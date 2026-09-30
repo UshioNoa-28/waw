@@ -46,8 +46,8 @@ class AimConfig:
     start_delay: float = 3.0
     aim_comp: int = 6
     aim_cw: float = 1.0
-    smoothing: float = 0.7
-    deadzone: float = 4.0
+    smoothing: float = 0.55
+    deadzone: float = 8.0
     head_offset_y: float = 0.0
     aim_gain: float = 0.0
     calibrate: bool = False
