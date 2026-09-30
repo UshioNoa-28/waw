@@ -268,17 +268,18 @@ function track(id){
 }
 NUM.forEach(track);
 ["bt_host","bt_port","classes","trigger","always_on","triggerbot","debug"].forEach(track);
+function postp(path){return fetch(path,{method:"POST"});}
 document.getElementById("start").onclick=async()=>{
   await send({bt_host:document.getElementById("bt_host").value,bt_port:document.getElementById("bt_port").value});
-  const t=await(await fetch("/start")).text();
+  const t=await(await postp("/start")).text();
   document.getElementById("status").textContent=t==="started"?"启动中...":("错误: "+t);
 };
 document.getElementById("stop").onclick=async()=>{
-  const t=await(await fetch("/stop")).text();
-  document.getElementById("status").textContent="已停止 ("+t+")";
+  const t=await(await postp("/stop")).text();
+  document.getElementById("status").textContent="已停止";
 };
 document.getElementById("save").onclick=async()=>{
-  const t=await(await fetch("/save")).text();
+  const t=await(await postp("/save")).text();
   document.getElementById("status").textContent=t==="saved"?"已保存":"保存失败";
 };
 poll();
