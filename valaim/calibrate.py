@@ -69,21 +69,29 @@ def counts_per_px_formula(render_width: int, sens: float, fov_deg: float = VAL_F
 
 
 def measure_shift(img1, img2) -> tuple[float, float] | None:
-    """(px shift x, response) of img2 relative to img1 (grayscale)."""
-    import cv2
+    """(px shift x, response) of img2 relative to img1, via numpy-only phase
+    correlation (plain opencv-python has no cv2.phaseCorrelation)."""
     import numpy as np
 
-    g1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    g2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    try:
-        (sx, _), resp = cv2.phaseCorrelation(g1, g2)
-    except cv2.error:
+    g1 = np.asarray(img1, dtype=np.float32).mean(axis=2)
+    g2 = np.asarray(img2, dtype=np.float32).mean(axis=2)
+    g1 -= g1.mean()
+    g2 -= g2.mean()
+    if g1.std() < 1.0 or g2.std() < 1.0:
         return None
-    # Unwrap the FFT shift to the nearest signed value.
-    w = g1.shape[1]
-    if sx > w / 2:
-        sx -= w
-    return float(sx), float(resp)
+    try:
+        f1 = np.fft.rfft2(g1)
+        f2 = np.fft.rfft2(g2)
+        r = f1 * np.conj(f2)
+        r /= np.abs(r) + 1e-9
+        corr = np.fft.irfft2(r, s=g1.shape)
+    except ValueError:
+        return None
+    h, w = corr.shape
+    iy, ix = np.unravel_index(np.argmax(corr), corr.shape)
+    shift_x = ix - w if ix > w // 2 else ix
+    resp = float(corr.max())
+    return float(shift_x), resp
 
 
 def fit_slope(points: list[tuple[float, float]]) -> float:
@@ -93,7 +101,7 @@ def fit_slope(points: list[tuple[float, float]]) -> float:
     return num / den if den else 0.0
 
 
-def run_calibration(cfg, sizes: list[int], reps: int, settle: float) -> int:
+def run_calibration(cfg, sizes: list[int], reps: int, settle: float, countdown: float = 8.0) -> int:
     """Interactive sweep calibration; writes the json; prints a table."""
     from .capture import ScreenCapture
     from .input_ctrl import set_backend, move_mouse, close_backend
@@ -113,9 +121,13 @@ def run_calibration(cfg, sizes: list[int], reps: int, settle: float) -> int:
 
     print()
     print("站在训练场原地不动,准星对着有纹理的墙面(几米外)。")
-    input("准备好后按回车开始标定...")
+    print("注意:游戏失焦后不处理鼠标输入,所以标定期间【不要回到本窗口】。")
+    secs = max(2, int(countdown))
+    for i in range(secs, 0, -1):
+        print(f"  {i} 秒后开始,请立刻切回游戏(Alt+Tab)...")
+        time.sleep(1)
     print()
-    print(f"{'counts':>8} {'px shift':>10} {'px/count':>10}  响应")
+    print(f"{'counts':>8} {'px shift':>10} {'px/count':>10}  置信")
 
     points: list[tuple[float, float]] = []
     per_size: dict[int, list[float]] = {s: [] for s in sizes}

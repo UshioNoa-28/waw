@@ -60,6 +60,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--calib-file", default="", help="Calibration json path (default valaim_calib.json)")
     p.add_argument("--calibrate", action="store_true", help="Runtime probe calibration (last resort)")
     p.add_argument("--calibrate-tool", action="store_true", help="Run offline gain calibration and exit")
+    p.add_argument("--calib-countdown", type=float, default=8.0,
+                   help="Seconds to switch back to the game before calibration starts")
     p.add_argument("--key", default="none", help="Hold this key to aim (default: none = always on)")
     p.add_argument("--hold-button", default="none",
                    choices=["none", "left", "right", "middle", "x1", "x2"],
@@ -223,27 +225,21 @@ def calibrate_counts_per_px(capture: ScreenCapture, _status) -> float | None:
     Sends one probe move, compares two frames by phase correlation, and
     restores the view. Returns counts-per-pixel (what the engine needs).
     """
-    import cv2
-    import numpy as np
+    from .calibrate import measure_shift
 
     probe = 64
     _status("校准鼠标增益:发送一次试探移动...")
     img1, *_ = capture.grab()
-    g1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY).astype(np.float32)
     move_mouse(probe, 0)
-    time.sleep(0.18)
+    time.sleep(0.22)
     img2, *_ = capture.grab()
     move_mouse(-probe, 0)
     time.sleep(0.05)
-    g2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY).astype(np.float32)
 
-    try:
-        (shift_x, response), _ = cv2.phaseCorrelation(g1, g2)
-    except cv2.error:
+    res = measure_shift(img1, img2)
+    if res is None or res[1] < 0.02:
         return None
-    if response < 0.02:
-        return None
-    px = abs(shift_x)
+    px = abs(res[0])
     if px < 2.0:
         return None
     return probe / px
@@ -471,7 +467,7 @@ def main() -> None:
     if args.calibrate_tool:
         from .calibrate import run_calibration
 
-        raise SystemExit(run_calibration(cfg, [16, 32, 64, 128, 256], reps=3, settle=0.25))
+        raise SystemExit(run_calibration(cfg, [16, 32, 64, 128, 256], reps=3, settle=0.25, countdown=args.calib_countdown))
     run(cfg)
 
 
