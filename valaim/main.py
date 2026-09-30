@@ -293,9 +293,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         )
     )
 
-    print(f"Model: {cfg.model_path}")
-    print(f"Active provider: {detector.session.get_providers()}")
-    print(f"Backend requested: {cfg.backend}")
+    print(f"model: {os.path.basename(cfg.model_path)} | provider: {', '.join(detector.session.get_providers())}")
 
     try:
         backend = set_backend(cfg.input_backend, bt_host=cfg.bt_host, bt_port=cfg.bt_port)
@@ -304,7 +302,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         raise SystemExit(1)
     print(f"Input backend: {backend}")
     if backend == "bt":
-        print(f"[input] BT bridge -> {cfg.bt_host}:{cfg.bt_port} (phone must be paired as Bluetooth mouse)")
+        print(f"[input] bt -> {cfg.bt_host}:{cfg.bt_port}")
     if backend == "sendinput":
         print("[input] WARNING: SendInput is dropped while Vanguard-protected games are focused.")
 
@@ -344,8 +342,6 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         bt_test_loop(cfg)
         return
 
-    print(f"Keybind: hold {cfg.keybind} to aim (point your crosshair near the enemy)")
-
     if cfg.debug:
         cv2.namedWindow("valaim", cv2.WINDOW_NORMAL)
 
@@ -356,8 +352,6 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     log_file = log_path()
     last_log_time = 0.0
     last_status = ""
-    print(f"Log: {log_file}")
-
     while True:
         if stop_flag is not None and stop_flag.is_set():
             break

@@ -221,9 +221,35 @@ class OnnxDetector:
             )
         return detections
 
+    def _fallback_to_cpu(self) -> bool:
+        """Rebuild the session on CPU after a runtime DirectML/CUDA failure."""
+        import sys
+
+        if self.backend == "cpu":
+            return False
+        try:
+            import onnxruntime as ort
+
+            if str(self.session.get_providers()[:1]) == "['CPUExecutionProvider']":
+                return False
+            self.session = ort.InferenceSession(
+                self.model_path, providers=["CPUExecutionProvider"]
+            )
+            self.backend = "cpu"
+            print("[inference] GPU provider failed at runtime -> switched to CPU",
+                  file=sys.stderr)
+            return True
+        except Exception:
+            return False
+
     def detect(self, img: np.ndarray, offset_x: int = 0, offset_y: int = 0) -> list[Detection]:
         canvas, scale, pad_x, pad_y = _letterbox(img, self.imgsz)
         blob = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         blob = np.ascontiguousarray(blob.transpose(2, 0, 1)[None])
-        outputs = self.session.run([self.output_name], {self.input_name: blob})
+        try:
+            outputs = self.session.run([self.output_name], {self.input_name: blob})
+        except Exception:
+            if not self._fallback_to_cpu():
+                raise
+            outputs = self.session.run([self.output_name], {self.input_name: blob})
         return self._decode(outputs[0], scale, pad_x, pad_y, offset_x, offset_y)
