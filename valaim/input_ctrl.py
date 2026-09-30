@@ -80,6 +80,24 @@ def get_cursor_pos() -> tuple[int, int]:
 
 _BACKEND = "auto"
 _BT = None
+_RAW = None
+
+
+def _ensure_raw_input() -> None:
+    """Start the raw input sink thread (Windows). Safe to call repeatedly."""
+    global _RAW
+    if _RAW is not None or sys.platform != "win32":
+        return
+    try:
+        from . import rawinput as _ri
+
+        if _ri.start():
+            _RAW = _ri
+            print("[input] raw input sink active (button/key reads work while the game is focused)")
+        else:
+            print("[input] raw input sink unavailable; falling back to GetAsyncKeyState", file=sys.stderr)
+    except Exception as exc:
+        print(f"[input] raw input init failed ({exc})", file=sys.stderr)
 
 
 def set_backend(name: str, bt_host: str | None = None, bt_port: int = 47800) -> str:
@@ -92,6 +110,8 @@ def set_backend(name: str, bt_host: str | None = None, bt_port: int = 47800) -> 
     name = (name or "auto").lower()
     if name not in {"auto", "bt", "sendinput"}:
         raise ValueError(f"Unknown input backend: {name}")
+
+    _ensure_raw_input()
 
     if bt_host is None:
         bt_host = os.environ.get("BT_BRIDGE_HOST")
@@ -156,7 +176,10 @@ def move_mouse(dx: int, dy: int) -> None:
 def press_key(key: str) -> bool:
     if sys.platform != "win32":
         return False
-    return bool(user32.GetAsyncKeyState(_vk(key)) & 0x8000)
+    vk = _vk(key)
+    if _RAW is not None:
+        return _RAW.key_down(vk)
+    return bool(user32.GetAsyncKeyState(vk) & 0x8000)
 
 
 VK_LBUTTON = 0x01
@@ -175,13 +198,19 @@ _MOUSE_VK = {
 
 
 def mouse_button_down(button: str) -> bool:
-    """True while the given physical mouse button is held (read-only)."""
+    """True while the given physical mouse button is held (read-only).
+
+    Uses the raw input sink (survives the game consuming input) when it is up,
+    otherwise GetAsyncKeyState.
+    """
     if sys.platform != "win32":
         return False
-    vk = _MOUSE_VK.get(button.lower())
-    if vk is None:
+    name = button.lower()
+    if name not in _MOUSE_VK:
         raise ValueError(f"Unsupported mouse button: {button}")
-    return bool(user32.GetAsyncKeyState(vk) & 0x8000)
+    if _RAW is not None:
+        return _RAW.mouse_button_down(name)
+    return bool(user32.GetAsyncKeyState(_MOUSE_VK[name]) & 0x8000)
 
 
 def key_state(key: str) -> int:
@@ -195,6 +224,8 @@ def key_state(key: str) -> int:
     vk = globals().get("VK", {}).get(key.upper())
     if vk is None:
         return -2
+    if _RAW is not None:
+        return 0x8000 if _RAW.key_down(vk) else 0
     return int(user32.GetAsyncKeyState(vk)) & 0xFFFF
 
 

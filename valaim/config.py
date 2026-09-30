@@ -37,6 +37,8 @@ class AimConfig:
 
     keybind: str = ""
     hold_button: str = ""
+    fire_button: str = ""
+    fire_radius: int = 12
     triggerbot: bool = False
     trigger_radius: int = 80
 

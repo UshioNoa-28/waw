@@ -79,6 +79,7 @@ NUMERIC = {
     "head_bias": float, "head_offset_y": float,
     "move_fraction": float, "max_step": int, "smoothing": float,
     "deadzone": float, "fps": int, "trigger_radius": int, "aim_gain": float,
+    "fire_radius": int,
 }
 
 
@@ -119,10 +120,20 @@ class Panel:
                 elif key == "trigger":
                     self.cfg.keybind = str(value).strip().upper()
                     self.cfg.hold_button = ""
+                elif key == "fire_button":
+                    fb = str(value).strip().lower()
+                    if fb in ("", "none"):
+                        self.cfg.fire_button = ""
+                    elif fb in ("x1", "x2", "middle", "right"):
+                        self.cfg.fire_button = fb
+                        self.cfg.keybind = ""
+                    else:
+                        return "开火键无效(可选: x1 x2 middle right)"
                 elif key == "always_on":
                     if value:
                         self.cfg.keybind = ""
                         self.cfg.hold_button = ""
+                        self.cfg.fire_button = ""
                 elif key in ("debug", "triggerbot"):
                     setattr(self.cfg, key, bool(value))
             return None
@@ -235,6 +246,9 @@ button:disabled{opacity:.4;cursor:default}
 
 <div class="card"><h2>触发方式</h2>
 <div class="row"><label>始终开启(不用按键)</label><input type=checkbox id="always_on"><label style="flex:0 0 auto">或按住键</label><input type=text id="trigger" size=10></div>
+<div class="row"><label>开火键 x1/x2/middle/right</label><input type=text id="fire_button" size=10>
+<label style="flex:0 0 auto">锁定半径px</label><input type=range id="fire_radius" min=4 max=60 step=2 style="flex:1"><span class=val id="fire_radius_v"></span></div>
+<div class="hint">开火键模式:按住侧键(如 x1)→ 自动吸附 → 锁定后手机替你按左键开火,松开即停。此时不要用物理左键射击。</div>
 <div class="row"><label>自动开火(吸到就打)</label><input type=checkbox id="triggerbot"></div>
 <div class="row"><label>显示画面预览(debug 窗口)</label><input type=checkbox id="debug"></div>
 </div>
@@ -249,12 +263,12 @@ button:disabled{opacity:.4;cursor:default}
 <div id="status">加载中...</div>
 
 <script>
-const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","fps"];
-const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0};
+const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","fire_radius","fps"];
+const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0,fire_radius:0};
 function fill(s){
   // Never overwrite the field the user is typing into.
   const act=document.activeElement;
-  for(const id of ["bt_host","bt_port","classes","trigger"]){
+  for(const id of ["bt_host","bt_port","classes","trigger","fire_button"]){
     const el=document.getElementById(id);
     if(el!==act){
       const want=id==="classes"?(s.target_classes||""):String(s[id]??(id==="bt_port"?47800:""));
@@ -290,7 +304,7 @@ function track(id){
   else{ el.addEventListener("input",push); el.addEventListener("change",push); }
 }
 NUM.forEach(track);
-["bt_host","bt_port","classes","trigger","always_on","triggerbot","debug"].forEach(track);
+["bt_host","bt_port","classes","trigger","fire_button","always_on","triggerbot","debug"].forEach(track);
 function postp(path){return fetch(path,{method:"POST"});}
 document.getElementById("start").onclick=async()=>{
   await send({bt_host:document.getElementById("bt_host").value,bt_port:document.getElementById("bt_port").value});

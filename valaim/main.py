@@ -63,6 +63,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--fps", type=int, default=60, help="Cap the aim loop at this FPS (0 = unlimited)")
     p.add_argument("--triggerbot", action="store_true")
     p.add_argument("--trigger-radius", type=int, default=80)
+    p.add_argument("--fire-button", default="none",
+                   choices=["none", "x1", "x2", "middle", "right"],
+                   help="Aim-fire mode: hold this physical button; the tool snaps and fires a virtual left click when locked")
+    p.add_argument("--fire-radius", type=int, default=12, help="Lock radius (px) for --fire-button mode")
     p.add_argument("--input-backend", default="auto", choices=["auto", "bt", "sendinput"])
     p.add_argument("--bt-host", default=None, help="Phone IP shown in the BtAimBridge app")
     p.add_argument("--bt-port", type=int, default=47800)
@@ -105,6 +109,8 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         hold_button="" if args.hold_button == "none" else args.hold_button,
         triggerbot=args.triggerbot,
         trigger_radius=args.trigger_radius,
+        fire_button="" if args.fire_button == "none" else args.fire_button,
+        fire_radius=args.fire_radius,
         input_backend=args.input_backend,
         bt_host=args.bt_host,
         bt_port=args.bt_port,
@@ -316,6 +322,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         cv2.namedWindow("valaim", cv2.WINDOW_NORMAL)
 
     clicking = False
+    shooting = False
     frames = 0
     log_file = log_path()
     last_log_time = 0.0
@@ -340,9 +347,11 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         img, crop_x, crop_y, crop_w, crop_h = capture.grab()
         detections = detector.detect(img, crop_x, crop_y)
         cursor = capture.crosshair()
-        # Aim only while the trigger key/button is held. Keyboard keys are
-        # reliable; mouse buttons are often swallowed by the game's raw input.
-        if cfg.keybind:
+        # Trigger selection. fire_button mode: aim while the button is held and
+        # the virtual left click is emitted once locked.
+        if cfg.fire_button:
+            active = mouse_button_down(cfg.fire_button)
+        elif cfg.keybind:
             active = press_key(cfg.keybind)
         elif cfg.hold_button:
             active = mouse_button_down(cfg.hold_button)
@@ -367,10 +376,23 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             else:
                 action = "locked (already close)"
 
+        # Aim-fire mode: hold the physical fire button, and once the crosshair
+        # is locked on the target, the phone emits a virtual left click (hold
+        # = full auto while tracking, release = stop). Every shot, including
+        # the first, is fired only after the aim is on target.
+        if cfg.fire_button:
+            want_fire = bool(active and dist is not None and dist <= cfg.fire_radius)
+            if want_fire != shooting:
+                set_mouse_button("left", want_fire)
+                shooting = want_fire
+            action = (action + " | FIRE" if shooting else action)
+
         if active:
             status_text = selector.explain(detections, cursor)
             if action:
                 status_text = f"{status_text} | {action}"
+        elif cfg.fire_button:
+            status_text = f"idle | hold {cfg.fire_button.upper()} to aim+fire | detections={len(detections)}"
         elif cfg.hold_button:
             status_text = f"idle | hold {cfg.hold_button} mouse to aim | detections={len(detections)}"
         elif cfg.keybind:
@@ -392,7 +414,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             last_log_time = now
             last_status = status_text
 
-        want_click = bool(cfg.triggerbot and active and dist is not None and dist <= cfg.trigger_radius)
+        want_click = bool(cfg.triggerbot and not cfg.fire_button and active and dist is not None and dist <= cfg.trigger_radius)
         if want_click != clicking:
             set_mouse_button("left", want_click)
             clicking = want_click
@@ -413,6 +435,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         else:
             time.sleep(cfg.frame_sleep)
 
+    if shooting:
+        set_mouse_button("left", False)
     if cfg.max_frames:
         print(f"Done: {frames} frames")
 
