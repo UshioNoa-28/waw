@@ -33,7 +33,9 @@ class AimConfig:
     deadzone: float = 2.0
     head_offset_y: float = 0.0
     aim_gain: float = 0.0
-    calibrate: bool = True
+    calibrate: bool = False
+    sens: float = 0.0
+    calib_file: str = ""
 
     keybind: str = ""
     hold_button: str = ""

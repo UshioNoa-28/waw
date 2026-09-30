@@ -54,8 +54,12 @@ def parse_args() -> argparse.Namespace:
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
     p.add_argument("--deadzone", type=float, default=2.0, help="Stop radius in pixels")
     p.add_argument("--aim-gain", type=float, default=0.0,
-                   help="Mouse counts per screen pixel (0 = auto-calibrate at startup)")
-    p.add_argument("--no-calibrate", action="store_true", help="Skip startup gain calibration")
+                   help="Mouse counts per screen pixel (0 = auto from calib file / --sens)")
+    p.add_argument("--sens", type=float, default=0.0,
+                   help="In-game sensitivity; compute gain from the Valorant formula (0 = use calib file)")
+    p.add_argument("--calib-file", default="", help="Calibration json path (default valaim_calib.json)")
+    p.add_argument("--calibrate", action="store_true", help="Runtime probe calibration (last resort)")
+    p.add_argument("--calibrate-tool", action="store_true", help="Run offline gain calibration and exit")
     p.add_argument("--key", default="none", help="Hold this key to aim (default: none = always on)")
     p.add_argument("--hold-button", default="none",
                    choices=["none", "left", "right", "middle", "x1", "x2"],
@@ -101,7 +105,9 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         smoothing=args.smoothing,
         deadzone=args.deadzone,
         aim_gain=args.aim_gain,
-        calibrate=not args.no_calibrate,
+        calibrate=args.calibrate,
+        sens=args.sens,
+        calib_file=args.calib_file,
         head_width=args.head_width,
         move_fraction=args.move_fraction,
         max_step=args.max_step,
@@ -296,21 +302,37 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     if backend == "sendinput":
         print("[input] WARNING: SendInput is dropped while Vanguard-protected games are focused.")
 
+    # Gain (mouse counts per screen pixel) resolution order:
+    #   manual --aim-gain > offline calib file > --sens formula > --calibrate probe > 1.0
     cal_gain: float | None = None
     if cfg.aim_gain > 0:
         cal_gain = cfg.aim_gain
+        print(f"Aim gain: manual {cal_gain:.3f} counts/px")
         _status(f"瞄准增益(手动): {cal_gain:.2f} 计数/像素")
-    elif cfg.calibrate and backend == "bt":
-        try:
-            cal_gain = calibrate_counts_per_px(capture, _status)
-        except Exception:
-            cal_gain = None
-        if cal_gain:
-            print(f"Aim gain calibrated: {cal_gain:.2f} counts/px")
-            _status(f"校准完成:每像素 {cal_gain:.2f} 个鼠标计数")
-        else:
-            print("[calib] could not measure gain, defaulting to 1.0")
-            _status("增益校准失败(画面无纹理?),按 1.0 运行;可手动设置 aim-gain")
+    else:
+        from .calibrate import calib_path, load_calib, counts_per_px_formula
+
+        data = load_calib(calib_path(cfg.calib_file))
+        if data:
+            cal_gain = float(data["counts_per_px"])
+            print(f"Aim gain: calib file {cal_gain:.3f} counts/px ({data.get('time', '')})")
+            _status(f"增益: 标定文件 {cal_gain:.2f} 计数/像素")
+        elif cfg.sens > 0:
+            mon = capture.monitors[capture.monitor + 1] if capture.monitor >= 0 else capture.monitors[0]
+            cal_gain = counts_per_px_formula(int(mon["width"]), cfg.sens)
+            print(f"Aim gain: formula sens={cfg.sens} width={mon['width']} -> {cal_gain:.3f} counts/px")
+            _status(f"增益: 公式(sens {cfg.sens}) {cal_gain:.2f} 计数/像素")
+        elif cfg.calibrate and backend == "bt":
+            try:
+                cal_gain = calibrate_counts_per_px(capture, _status)
+            except Exception:
+                cal_gain = None
+            if cal_gain:
+                print(f"Aim gain: probe {cal_gain:.3f} counts/px")
+            else:
+                print("[calib] probe failed, gain=1.0; run --calibrate-tool once for a fixed value")
+        if not cal_gain:
+            _status(f"增益: {cal_gain or 1.0:.2f} 计数/像素(未标定)")
 
     if cfg.bt_test:
         bt_test_loop(cfg)
@@ -445,7 +467,12 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
 
 def main() -> None:
     args = parse_args()
-    run(config_from_args(args))
+    cfg = config_from_args(args)
+    if args.calibrate_tool:
+        from .calibrate import run_calibration
+
+        raise SystemExit(run_calibration(cfg, [16, 32, 64, 128, 256], reps=3, settle=0.25))
+    run(cfg)
 
 
 if __name__ == "__main__":
