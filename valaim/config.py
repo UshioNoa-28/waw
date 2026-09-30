@@ -31,6 +31,16 @@ class AimConfig:
     max_step: int = 60
     aim_lead: float = 0.1
     aim_floor: float = 2.0
+    arrive_px: float = 5.0
+    resume_px: float = 10.0
+    med_win: int = 5
+    humanize: bool = False
+    react_min: float = 120.0
+    react_max: float = 220.0
+    ramp_s: float = 0.09
+    tremor_px: float = 2.2
+    tremor_hz: float = 10.0
+    log_aim: bool = False
     aim_comp: int = 6
     aim_cw: float = 1.0
     smoothing: float = 0.7

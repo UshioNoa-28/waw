@@ -32,14 +32,19 @@ class AimParams:
     comp_frames: int = 3          # assumed in-flight window, in loop frames
 
     deadzone: float = 2.5         # stop inside this radius (px)
+    arrive_px: float = 5.0        # lock OFF the output inside this radius...
+    resume_px: float = 10.0       # ...and only resume past this (hysteresis)
+    med_win: int = 5              # median filter width on raw error (px jitter)
     smoothing: float = 0.6        # EMA weight for new error (0=ignore,1=raw)
 
-    # Human-like extras, off by default in the stable build.
-    tremor_px: float = 0.0
-    tremor_freq: float = 8.0
-    overshoot_factor: float = 1.0
-    overshoot_error: float = 99999.0
-    overshoot_frames: int = 0
+    # Humanization (measured from aim_lab: 60 trials, jit med 3.1px, bell rise,
+    # reaction included in 623ms median flick). Off unless enabled.
+    humanize: bool = False
+    react_ms: tuple = (120.0, 220.0)   # hold-off after a NEW target lock
+    ramp_s: float = 0.09               # gain ramps 40% -> 100% over this
+    tremor_px: float = 2.2             # OU tremor steady-state std (px)
+    tremor_hz: float = 10.0            # action-tremor band
+    seed: float = 0.0
 
     max_segment: int = 127
     # Mouse counts emitted per screen pixel of error. Depends on the in-game
@@ -52,19 +57,49 @@ class AimEngine:
     """Stateful shaper. One instance per session."""
 
     def __init__(self, params: AimParams | None = None, seed: int | None = None) -> None:
+        import random as _r
         self.p = params or AimParams()
+        self._rng = _r.Random(seed or None)
+        self._lock_at: float | None = None   # when current lock began (reaction gate)
+        self._gate = 0.0                      # gate length, s
+        self._tx = self._ty = 0.0             # OU tremor state
+        self._ph = 0.0
         self._sx: float | None = None   # smoothed error x
         self._sy: float | None = None
         self._carry_x = 0.0             # sub-pixel remainder
         self._carry_y = 0.0
-        self._overshoot_left = 0
         self._hist = []               # (t, px_x, px_y) commands not yet rendered
+        self._raw: list = []          # recent raw errors for median filter
+        self._latched = False         # arrived: output suppressed
 
     def reset(self) -> None:
         self._sx = self._sy = None
         self._carry_x = self._carry_y = 0.0
-        self._overshoot_left = 0
         self._hist = []
+        self._raw = []
+        self._latched = False
+        self._lock_at = None
+
+    def on_new_lock(self) -> None:
+        """Caller signals a fresh target (or a re-acquire after a gap)."""
+        self._lock_at = time.monotonic()
+        self._latched = False
+        lo = min(self.p.react_ms) / 1000.0
+        hi = max(self.p.react_ms) / 1000.0
+        self._gate = self._rng.uniform(lo, hi) if self.p.humanize else 0.0
+
+    def _tremor(self, dt: float) -> tuple[float, float]:
+        """Band-limited OU noise: theta=2*pi*hz, sigma set so std=tremor_px."""
+        import math as _m
+        if self.p.tremor_hz <= 0 or self.p.tremor_px <= 0:
+            return 0.0, 0.0
+        theta = 2.0 * _m.pi * self.p.tremor_hz
+        alpha = _m.exp(-theta * dt)
+        sigma = self.p.tremor_px * _m.sqrt(2.0 * theta)   # OU stationary std
+        scale = sigma * _m.sqrt(max(0.0, (1.0 - alpha * alpha) / (2.0 * theta))) * dt
+        self._tx = self._tx * alpha + self._rng.gauss(0.0, 1.0) * scale
+        self._ty = self._ty * alpha + self._rng.gauss(0.0, 1.0) * scale
+        return self._tx, self._ty
 
     def step(self, dx: float, dy: float,
              lead_x: float = 0.0, lead_y: float = 0.0) -> tuple[int, int]:
@@ -76,6 +111,26 @@ class AimEngine:
         term unstable here).
         """
         p = self.p
+
+        # Median filter first: kills single-frame outlier jumps of the box.
+        if p.med_win >= 3:
+            self._raw.append((dx, dy))
+            if len(self._raw) > p.med_win:
+                self._raw.pop(0)
+            xs = sorted(v[0] for v in self._raw)
+            ys = sorted(v[1] for v in self._raw)
+            dx = xs[len(xs) // 2]
+            dy = ys[len(ys) // 2]
+
+        # Arrival latch (hysteresis): once on target, hold position until the
+        # error clearly exceeds resume_px. Humans stop micro-correcting noise;
+        # chasing model jitter is exactly the "末端晃动" complaint.
+        raw_dist = math.hypot(dx, dy)
+        if self._latched:
+            if raw_dist <= p.resume_px:
+                self._carry_x = self._carry_y = 0.0
+                return 0, 0
+            self._latched = False
 
         # Exponential moving average of the target error (damps model jitter).
         if self._sx is None:
@@ -99,16 +154,27 @@ class AimEngine:
         ey = self._sy + lead_y - infl_y
         dist = math.hypot(self._sx, self._sy)
 
+        if raw_dist <= p.arrive_px:
+            self._latched = True
+            self._carry_x = self._carry_y = 0.0
+            return 0, 0
         if dist <= p.deadzone:
             self._carry_x = self._carry_y = 0.0
             return 0, 0
 
         gain = p.move_fraction
-        if dist > p.overshoot_error and self._overshoot_left == 0:
-            self._overshoot_left = p.overshoot_frames
-        if self._overshoot_left > 0:
-            gain *= p.overshoot_factor
-            self._overshoot_left -= 1
+        # Humanization: reaction gate, gain ramp-in (bell-ish onset), tremor.
+        if p.humanize and self._lock_at is not None:
+            since = time.monotonic() - self._lock_at
+            if since < self._gate:
+                return 0, 0
+            if p.ramp_s > 0 and since < self._gate + p.ramp_s:
+                f = (since - self._gate) / p.ramp_s
+                gain *= 0.4 + 0.6 * f
+            jx, jy = self._tremor(max(0.004, min(0.05, time.monotonic() - self._last_t if self._last_t else 0.016)))
+            self._last_t = time.monotonic()
+            ex += jx
+            ey += jy
 
         # Pixel error -> mouse counts using the calibrated gain.
         cp = cp0
