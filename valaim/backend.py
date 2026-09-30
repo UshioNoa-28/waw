@@ -73,6 +73,17 @@ class OnnxDetector:
         self._cpu_since = 0.0
         self.session = self._create_session(ort)
         self.input_name = self.session.get_inputs()[0].name
+        # Guard: a static-shape model rejects any other imgsz at run() time
+        # (that crash looked like INVALID_ARGUMENT Got:320 Expected:640).
+        # Adapt imgsz to the model instead of dying.
+        try:
+            dims = self.session.get_inputs()[0].shape
+            h, w = dims[2], dims[3]
+            if isinstance(h, int) and isinstance(w, int) and (h != self.imgsz or w != self.imgsz):
+                print(f"[inference] model is fixed {w}x{h}; ignoring --imgsz {self.imgsz}, using {h}")
+                self.imgsz = int(h)
+        except (IndexError, TypeError):
+            pass
         self.output_name = self._choose_output(ort)
 
     def _providers(self, ort) -> list:
