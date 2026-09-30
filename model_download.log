@@ -1,0 +1,55 @@
+22:55:22 attempt=1 size=897024 / 36650039
+22:57:23 attempt=2 size=3084672 / 36650039
+22:59:26 attempt=3 size=5536960 / 36650039
+23:01:28 attempt=4 size=8060078 / 36650039
+23:03:30 attempt=5 size=9773861 / 36650039
+23:05:32 attempt=6 size=11127324 / 36650039
+23:07:34 attempt=7 size=12500938 / 36650039
+23:09:36 attempt=8 size=14055983 / 36650039
+23:11:38 attempt=9 size=15677807 / 36650039
+23:13:41 attempt=10 size=17021277 / 36650039
+23:15:42 attempt=11 size=18073538 / 36650039
+23:17:44 attempt=12 size=19162443 / 36650039
+23:19:48 attempt=13 size=20522297 / 36650039
+23:21:49 attempt=14 size=22160052 / 36650039
+23:23:51 attempt=15 size=23978466 / 36650039
+23:25:53 attempt=16 size=25844775 / 36650039
+23:27:55 attempt=17 size=28338663 / 36650039
+23:29:58 attempt=18 size=30118028 / 36650039
+23:31:59 attempt=19 size=32124291 / 36650039
+23:34:02 attempt=20 size=34517379 / 36650039
+23:36:02 attempt=21 size=36650039 / 36650039
+23:36:02 DOWNLOAD COMPLETE -> exporting dynamic ONNX (this pulls torch, ~2-4 min if needed)
+names: {0: 'Body', 1: 'Head'}
+Ultralytics 8.4.168 🚀 Python-3.12.8 torch-2.14.0+cu130 CPU (AMD Ryzen 7 8845H w/ Radeon 780M Graphics)
+Model summary (fused): 72 layers, 3,006,038 parameters, 0 gradients, 8.1 GFLOPs
+
+[34m[1mPyTorch:[0m starting from '/tmp/opencode/best_headbody.pt' with input shape (1, 3, 640, 640) BCHW and output shape(s) (1, 6, 8400) (35.0 MB)
+[31m[1mrequirements:[0m Ultralytics requirement ['onnxruntime'] not found, attempting AutoUpdate...
+Using Python 3.12.8 environment at: /tmp/opencode/expenv
+Resolved 5 packages in 939ms
+Prepared 2 packages in 1.05s
+Installed 2 packages in 32ms
+ + flatbuffers==25.12.19
+ + onnxruntime==1.30.0
+
+[31m[1mrequirements:[0m AutoUpdate success ✅ 2.2s
+WARNING ⚠️ [31m[1mrequirements:[0m [1mRestart runtime or rerun command for updates to take effect[0m
+
+
+[34m[1mONNX:[0m starting export with onnx 1.23.1 opset 12...
+[34m[1mONNX:[0m slimming with onnxslim 0.1.97...
+[34m[1mONNX:[0m export success ✅ 9.2s, saved as '/tmp/opencode/best_headbody.onnx' (12.0 MB)
+
+Export complete (9.8s)
+Results saved to [1m/tmp/opencode/best_headbody.onnx[0m
+Predict:         yolo predict task=detect model=/tmp/opencode/best_headbody.onnx imgsz=640 
+Validate:        yolo val task=detect model=/tmp/opencode/best_headbody.onnx imgsz=640   
+Visualize:       https://netron.app
+EXPORTED: /tmp/opencode/best_headbody.onnx
+23:36:22 exporting done -> verifying 640 and 320 with onnxruntime
+INPUT 640 x 640 -> OK
+INPUT 320 x 320 -> OK
+INPUT 448 x 448 -> OK
+VERIFY DONE
+23:36:23 ALL DONE
