@@ -188,7 +188,7 @@ def _run_inner() -> None:
     hinst = user32.GetModuleHandleW(None)
 
     WNDPROC = ctypes.WINFUNCTYPE(
-        ctypes.c_long, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
+        ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
     )
 
     def wnd_proc(hwnd, msg, wparam, lparam):
@@ -197,9 +197,7 @@ def _run_inner() -> None:
                 _handle_input(lparam)
         except Exception:
             pass
-        return ctypes.cast(
-            user32.DefWindowProcW(hwnd, msg, wparam, lparam), ctypes.c_long
-        ).value
+        return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
     global _proc_ref
     _proc_ref = WNDPROC(wnd_proc)
