@@ -21,12 +21,12 @@ from dataclasses import dataclass
 
 @dataclass
 class AimParams:
-    move_fraction: float = 0.65   # fraction of the (smoothed) error per frame
-    max_step: int = 60            # hard cap on pixels per frame
+    move_fraction: float = 0.3   # fraction of the (smoothed) error per frame
+    max_step: int = 45            # hard cap on pixels per frame
     min_move: float = 1.0
 
     deadzone: float = 2.0         # stop inside this radius (px)
-    smoothing: float = 0.4        # EMA weight for new error (0=ignore,1=raw)
+    smoothing: float = 0.6        # EMA weight for new error (0=ignore,1=raw)
 
     # Human-like extras, off by default in the stable build.
     tremor_px: float = 0.0

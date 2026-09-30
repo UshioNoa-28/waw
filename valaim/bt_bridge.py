@@ -16,8 +16,11 @@ Protocol (ASCII, one command per line):
     W <ticks>\\n       wheel
     P\\n               keepalive
 
-The socket is kept open on a background thread with a small send queue, so a
-stall on the phone side does not block the aim loop.
+Coalescing (important for stability): Bluetooth can stall briefly and pile up
+backlog. If we replayed every queued frame, 15 stale corrections would fire at
+once and the crosshair would fly past the target. So only the LATEST pending
+move is sent per drain (each new frame supersedes the previous one), while
+wheel ticks accumulate and button state is edge-triggered.
 """
 
 from __future__ import annotations
@@ -26,7 +29,6 @@ import socket
 import sys
 import threading
 import time
-from collections import deque
 
 DEFAULT_PORT = 47800
 
@@ -47,22 +49,25 @@ class BtBridge:
         host: str,
         port: int = DEFAULT_PORT,
         connect_timeout: float = 3.0,
-        send_hz_cap: int = 1000,
     ) -> None:
-        if sys.platform != "win32" and sys.platform != "linux":
-            raise BtBridgeError("TCP bridge runs on any OS")
         self.host = host
         self.port = int(port)
         self.connect_timeout = connect_timeout
-        self._send_interval = 1.0 / max(1, send_hz_cap)
 
         self._sock: socket.socket | None = None
-        self._queue: deque[bytes] = deque(maxlen=1024)
         self._lock = threading.Lock()
         self._cond = threading.Condition(self._lock)
         self._running = True
         self._connected = False
         self._last_error = ""
+
+        # latest-wins pending move; accumulating wheel; edge-triggered buttons
+        self._pend_dx = 0
+        self._pend_dy = 0
+        self._pend_wheel = 0
+        self._buttons = 0
+        self._sent_buttons = 0
+        self._dirty = False
 
         self._thread = threading.Thread(target=self._run, name="bt-bridge", daemon=True)
         self._thread.start()
@@ -77,6 +82,9 @@ class BtBridge:
             with self._lock:
                 self._sock = sock
                 self._connected = True
+                # fresh session: make sure buttons match on the next flush
+                self._sent_buttons = -1
+                self._dirty = True
             return True
         except OSError as exc:
             self._last_error = str(exc)
@@ -99,26 +107,32 @@ class BtBridge:
         last_tx = time.monotonic()
         while self._running:
             with self._cond:
-                if not self._queue:
-                    self._cond.wait(timeout=0.5)
-                batch = b"".join(self._queue)
-                self._queue.clear()
+                while self._running and not self._dirty and time.monotonic() - last_tx <= 3.0:
+                    self._cond.wait(timeout=0.4)
+                if not self._running:
+                    return
                 sock = self._sock
+                lines: list[str] = []
+                if self._dirty:
+                    if self._buttons != self._sent_buttons:
+                        lines.append(f"B {self._buttons & 0x1F}")
+                        self._sent_buttons = self._buttons
+                    dx, dy = self._pend_dx, self._pend_dy
+                    wheel = self._pend_wheel
+                    self._pend_dx = self._pend_dy = 0
+                    self._pend_wheel = 0
+                    self._dirty = False
+                    if dx or dy:
+                        lines.append(f"M {dx} {dy}")
+                    if wheel:
+                        lines.append(f"W {1 if wheel > 0 else -1}")
+                if not lines:
+                    lines.append("P")
             if sock is None:
                 return
-            now = time.monotonic()
-            try:
-                if batch:
-                    sock.sendall(batch)
-                elif now - last_tx > 3.0:
-                    # Periodic keepalive: distinguishes an idle aim loop from
-                    # a dead connection.
-                    sock.sendall(b"P\n")
-                else:
-                    continue
-            except OSError:
-                raise
-            last_tx = now
+            payload = ("\n".join(lines) + "\n").encode("ascii")
+            sock.sendall(payload)
+            last_tx = time.monotonic()
 
     def _drop(self) -> None:
         with self._lock:
@@ -133,26 +147,33 @@ class BtBridge:
 
     # -- outgoing commands ---------------------------------------------
 
-    def _enqueue(self, line: str) -> None:
-        data = (line + "\n").encode("ascii")
-        with self._cond:
-            self._queue.append(data)
-            self._cond.notify()
-
     def move(self, dx: int, dy: int) -> None:
         if dx == 0 and dy == 0:
             return
-        self._enqueue(f"M {int(dx)} {int(dy)}")
+        with self._cond:
+            self._pend_dx = int(dx)
+            self._pend_dy = int(dy)
+            self._dirty = True
+            self._cond.notify()
 
     def set_buttons(self, mask: int) -> None:
-        self._enqueue(f"B {int(mask) & 0x1F}")
+        with self._cond:
+            self._buttons = int(mask) & 0x1F
+            self._dirty = True
+            self._cond.notify()
 
     def wheel(self, ticks: int) -> None:
-        if ticks:
-            self._enqueue(f"W {int(ticks)}")
+        if not ticks:
+            return
+        with self._cond:
+            self._pend_wheel += int(ticks)
+            self._dirty = True
+            self._cond.notify()
 
     def ping(self) -> None:
-        self._enqueue("P")
+        with self._cond:
+            self._dirty = True
+            self._cond.notify()
 
     # -- status --------------------------------------------------------
 
@@ -168,7 +189,8 @@ class BtBridge:
         # Make sure the host sees "no buttons held" before the socket dies,
         # otherwise a stuck virtual left click survives this session.
         try:
-            sock = self._sock
+            with self._cond:
+                sock = self._sock
             if sock is not None:
                 sock.sendall(b"B 0\nP\n")
                 time.sleep(0.2)

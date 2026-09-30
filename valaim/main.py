@@ -48,9 +48,9 @@ def parse_args() -> argparse.Namespace:
                    help="Vertical aim point inside a head box (0=top, 1=bottom; default 0.55)")
     p.add_argument("--head-offset-y", type=float, default=0.0,
                    help="Extra downward aim offset in capture pixels (use if it aims too high)")
-    p.add_argument("--move-fraction", type=float, default=0.65)
-    p.add_argument("--max-step", type=int, default=60, help="Max pixels moved per frame (slew limit)")
-    p.add_argument("--smoothing", type=float, default=0.4,
+    p.add_argument("--move-fraction", type=float, default=0.3)
+    p.add_argument("--max-step", type=int, default=45, help="Max counts moved per frame (slew limit)")
+    p.add_argument("--smoothing", type=float, default=0.6,
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
     p.add_argument("--deadzone", type=float, default=2.0, help="Stop radius in pixels")
     p.add_argument("--aim-gain", type=float, default=0.0,

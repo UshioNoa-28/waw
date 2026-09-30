@@ -36,19 +36,55 @@ class BridgeServer(
     @Volatile private var client: Socket? = null
     @Volatile private var buttonMask = 0
 
+    // Coalesced, rate-paced move output: the PC can burst commands faster
+    // than Bluetooth can drain; replaying every queued move would stack up
+    // stale corrections and overshoot the target. Keep the latest pending
+    // move and emit at a real-mouse-like report rate instead.
+    @Volatile private var pendX = 0
+    @Volatile private var pendY = 0
+    private var drainThread: Thread? = null
+
     fun start() {
         if (running) return
         running = true
         worker = thread(name = "bridge-server") { loop() }
+        drainThread = thread(name = "bridge-drain") { drainLoop() }
     }
 
     fun stop() {
         running = false
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
+        drainThread?.interrupt()
+        drainThread = null
         releaseAll()
         try { client?.close() } catch (_: Exception) {}
         client = null
+    }
+
+    private fun drainLoop() {
+        while (running) {
+            val x = pendX
+            val y = pendY
+            if (x != 0 || y != 0) {
+                pendX = 0
+                pendY = 0
+                sendSplit(x, y)
+            }
+            try { Thread.sleep(6) } catch (_: InterruptedException) { break }
+        }
+    }
+
+    private fun sendSplit(x: Int, y: Int) {
+        var rx = x
+        var ry = y
+        while (rx != 0 || ry != 0) {
+            val sx = rx.coerceIn(-127, 127)
+            val sy = ry.coerceIn(-127, 127)
+            hid.sendReport(buttonMask, sx, sy, 0)
+            rx -= sx
+            ry -= sy
+        }
     }
 
     private fun loop() {
@@ -67,6 +103,8 @@ class BridgeServer(
                     }
                     client = incoming
                     buttonMask = 0
+                    pendX = 0
+                    pendY = 0
                     releaseAll()
                     onClient(incoming.inetAddress?.hostAddress ?: "?")
                     thread(name = "bridge-client") { handleClient(incoming) }
@@ -116,16 +154,8 @@ class BridgeServer(
                 if (parts.size < 3) return
                 val dx = parts[1].toIntOrNull() ?: return
                 val dy = parts[2].toIntOrNull() ?: return
-                var rx = dx
-                var ry = dy
-                // HID reports carry at most +-127 per axis; split larger moves.
-                while (rx != 0 || ry != 0) {
-                    val sx = rx.coerceIn(-127, 127)
-                    val sy = ry.coerceIn(-127, 127)
-                    hid.sendReport(buttonMask, sx, sy, 0)
-                    rx -= sx
-                    ry -= sy
-                }
+                pendX = dx
+                pendY = dy
             }
             "B" -> {
                 buttonMask = (parts.getOrNull(1)?.toIntOrNull() ?: 0) and 0x1F
