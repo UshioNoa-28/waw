@@ -133,6 +133,7 @@ class Panel:
                 elif key == "trigger":
                     self.cfg.keybind = str(value).strip().upper()
                     self.cfg.hold_button = ""
+                    self.cfg.fire_button = ""
                 elif key == "fire_button":
                     fb = str(value).strip().lower()
                     if fb in ("", "none"):
@@ -283,6 +284,7 @@ button:disabled{opacity:.4;cursor:default}
 <button id="quit">退出程序</button>
 </div>
 
+<div id="capbar" style="display:none;background:#7c3aed;color:#fff;border-radius:8px;padding:10px 12px;font-size:14px;margin:0 0 10px"></div>
 <div id="status">加载中...</div>
 
 <script>
@@ -300,37 +302,48 @@ function codeToName(code){
   return KEYMAP[code]||null;
 }
 let captureMode=null;
+const capbar=()=>document.getElementById("capbar");
+function capMsg(t){const b=capbar();b.textContent=t;b.style.display="block";}
+function capEnd(){
+  captureMode=null;
+  capbar().style.display="none";
+  document.getElementById("capKey").textContent="采集";
+  document.getElementById("capBtn").textContent="采集";
+}
 function startCapture(which){
   captureMode=which;
-  document.getElementById("status").textContent=which==="key"?"采集:请按下要绑定的键盘键...":"采集:请按一下要绑定的鼠标键...";
+  document.getElementById("capKey").textContent = which==="key"?"采集中...":"采集";
+  document.getElementById("capBtn").textContent = which==="btn"?"采集中...":"采集";
+  document.getElementById("trigger").blur();
+  document.getElementById("fire_button").blur();
+  capMsg(which==="key"
+    ? "采集模式:请按下要绑定的键盘键(Esc 取消)。此期间忽略鼠标键。"
+    : "采集模式:请按下要绑定的鼠标键(中键/侧键/右键;左键不行,它是被虚拟点击的键。Esc 取消)");
 }
 document.getElementById("capKey").onclick=()=>startCapture("key");
 document.getElementById("capBtn").onclick=()=>startCapture("btn");
-window.addEventListener("contextmenu",e=>{if(captureMode)e.preventDefault();});
 window.addEventListener("keydown",e=>{
   if(!captureMode)return;
   e.preventDefault();
-  if(e.code==="Escape"){captureMode=null;document.getElementById("status").textContent="已取消采集";return;}
-  if(captureMode!=="key")return;
+  if(e.code==="Escape"){capEnd();return;}
+  if(captureMode!=="key"){capMsg("这是鼠标键。键盘采集请点「或按住键」旁的采集。");return;}
   const n=codeToName(e.code);
-  if(!n)return;
-  captureMode=null;
+  if(!n){capMsg("该键暂不支持,换字母/数字/F1-F12/空格/Shift/Ctrl/Alt 试试");return;}
   const el=document.getElementById("trigger"); el.value=n;
-  document.getElementById("always_on").checked=false;
   send({trigger:n});
-  document.getElementById("status").textContent="已绑定按键: "+n;
+  capEnd();
+  document.getElementById("status").textContent="已绑定按住键: "+n;
 },true);
 window.addEventListener("mousedown",e=>{
   if(!captureMode)return;
   e.preventDefault();
-  if(captureMode!=="btn")return;
+  if(captureMode!=="btn"){return;}
   const names={0:"left",1:"middle",2:"right",3:"x1",4:"x2"};
   const n=names[e.button]; if(!n)return;
-  if(n==="left"){document.getElementById("status").textContent="左键不能作为开火键(它就是被虚拟按的那个)";return;}
-  captureMode=null;
+  if(n==="left"){capMsg("左键不能作为开火键(开火就是虚拟按左键)。请按 中键/侧键/右键,或按 Esc 取消");return;}
   const el=document.getElementById("fire_button"); el.value=n;
-  document.getElementById("always_on").checked=false;
   send({fire_button:n});
+  capEnd();
   document.getElementById("status").textContent="已绑定开火键: "+n;
 },true);
 function fill(s){
@@ -353,6 +366,7 @@ function fill(s){
     if(el!==act) el.value=s[k];
     document.getElementById(k+"_v").textContent=(+s[k]).toFixed(DEC[k]??1);
   }
+  if(captureMode){return;}
   const st=document.getElementById("status");
   st.textContent=s.status;
   st.className=s.running?"run":(s.status.startsWith("错误")?"err":"");
