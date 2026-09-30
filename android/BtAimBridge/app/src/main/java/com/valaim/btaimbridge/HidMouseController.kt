@@ -175,6 +175,18 @@ class HidMouseController(
         }
     }
 
+    /**
+     * Full reset: stop everything, forget the saved host. Pairing keys live
+     * in the two OSes, not in this app - to truly start over, also remove
+     * "BtAimBridge" in Windows Bluetooth settings, then pair again fresh.
+     */
+    fun resetAll() {
+        unregister()
+        reconnecting = false
+        prefs.edit().remove(KEY_HOST_MAC).apply()
+        onState("Reset done - remove \"BtAimBridge\" in Windows, then re-pair")
+    }
+
     @SuppressLint("MissingPermission")
     private fun maybeReregister() {
         if (manualStop || registered) return

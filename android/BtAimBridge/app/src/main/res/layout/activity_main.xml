@@ -96,6 +96,13 @@
             android:layout_marginTop="8dp"
             android:text="Reconnect to last PC" />
 
+        <Button
+            android:id="@+id/btnReset"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Reset pairing (clean re-pair)" />
+
         <TextView
             android:id="@+id/tvStatus"
             android:layout_width="match_parent"
