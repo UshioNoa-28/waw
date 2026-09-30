@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--deadzone", type=float, default=4.0, help="Fixed stop radius in pixels (used when --dz-frac 0)")
     p.add_argument("--dz-frac", type=float, default=0.25, help="Deadzone as fraction of head-box width (0=fixed --deadzone)")
     p.add_argument("--no-burst", dest="burst", action="store_false", help="Disable one-stroke burst mode (revert to per-frame loop)")
-    p.add_argument("--burst-cooldown", type=float, default=0.15, help="Silence after a burst stroke (s)")
+    p.add_argument("--burst-cooldown", type=float, default=0.28, help="Silence after a burst stroke (s)")
     p.add_argument("--burst-gain", type=float, default=0.95, help="Fraction of error per stroke")
     p.add_argument("--aim-gain", type=float, default=0.0,
                    help="Mouse counts per screen pixel (0 = auto from calib file / --sens)")
@@ -75,8 +75,8 @@ def parse_args() -> argparse.Namespace:
                    choices=["none", "left", "right", "middle", "x1", "x2"],
                    help="Aim only while this mouse button is held (default: left)")
     p.add_argument("--fps", type=int, default=60, help="Cap the aim loop at this FPS (0 = unlimited)")
-    p.add_argument("--arrive-px", type=float, default=0.0, help="Lock output when error inside this (px); 0=off")
-    p.add_argument("--resume-px", type=float, default=10.0, help="Unlock output when error exceeds this (px)")
+    p.add_argument("--arrive-px", type=float, default=8.0, help="Lock output when error inside this (px); 0=off")
+    p.add_argument("--resume-px", type=float, default=32.0, help="Unlock output when error exceeds this (px)")
     p.add_argument("--med-win", type=int, default=1, help="Median filter width on detection error (1=off)")
     p.add_argument("--humanize", action="store_true", help="Reaction gate + ramp-in + tremor (human-like onset)")
     p.add_argument("--aim-floor", type=float, default=2.0, help="Min counts per frame outside deadzone (0=off)")

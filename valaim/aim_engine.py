@@ -37,8 +37,8 @@ class AimParams:
     burst: bool = False           # one full stroke per observation, then silence
     burst_cooldown: float = 0.15  # s of enforced silence after a burst (>actuation lag)
     burst_gain: float = 0.95      # fraction of error covered by the single stroke
-    arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
-    resume_px: float = 10.0       # ...and only resume past this (hysteresis)
+    arrive_px: float = 8.0        # lock OFF the output inside this radius (0=off)
+    resume_px: float = 32.0       # ...and only resume past this (above spike band)
     med_win: int = 1              # median filter width on raw error (1=off)
     smoothing: float = 0.6        # EMA weight for new error (0=ignore,1=raw)
 
@@ -77,6 +77,7 @@ class AimEngine:
         self._raw: list = []          # recent raw errors for median filter
         self._latched = False         # arrived: output suppressed
         self._burst_t = 0.0
+        self._bpx = None   # previous raw observation for burst 2-point median
         self._dbg = None              # (smx, smy, inflx, infly, rawx, rawy)
 
     def reset(self) -> None:
@@ -97,6 +98,7 @@ class AimEngine:
         self._raw = []
         self._carry_x = self._carry_y = 0.0
         self._sx = self._sy = None
+        self._bpx = None
         lo = min(self.p.react_ms) / 1000.0
         hi = max(self.p.react_ms) / 1000.0
         self._gate = self._rng.uniform(lo, hi) if self.p.humanize else 0.0
@@ -180,9 +182,15 @@ class AimEngine:
                 self._carry_x = self._carry_y = 0.0
                 return 0, 0
             cp0 = max(0.05, p.counts_per_px)
-            sx, sy = dx, dy          # burst uses the FRESH observation, not the
-                                     # jitter-damped EMA (stale EMA is exactly
-                                     # what would stack a second stroke)
+            # 2-point mean: a 1-frame detection spike (measured p50 18.5px at
+            # 4% of frames) would otherwise steer the whole stroke; averaging
+            # halves it while costing only half a frame of real-motion lag.
+            if self._bpx is None:
+                px_, py_ = dx, dy
+            else:
+                px_, py_ = (dx + self._bpx[0]) / 2.0, (dy + self._bpx[1]) / 2.0
+            self._bpx = (dx, dy)
+            sx, sy = px_, py_
             distb = math.hypot(sx, sy)
             self._dbg = (sx, sy, 0.0, 0.0, sx, sy)
             if distb <= dz or (self._burst_t and nowb - self._burst_t < p.burst_cooldown):
@@ -190,7 +198,7 @@ class AimEngine:
                 return 0, 0
             g = max(0.05, min(1.5, p.burst_gain))
             bx, by = sx * g * cp0, sy * g * cp0
-            lim = max(1, min(p.max_step, p.max_segment))
+            lim = max(1, p.max_step)   # phone HID layer splits >127 itself
             magb = math.hypot(bx, by)
             if magb > lim:
                 sc = lim / magb
@@ -198,6 +206,7 @@ class AimEngine:
             ix, iy = int(round(bx)), int(round(by))
             if ix or iy:
                 self._burst_t = nowb
+                self._hist.append((nowb, ix / cp0, iy / cp0))
             return ix, iy
 
         # Smith-predictor style compensation: our commands only appear in the

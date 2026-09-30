@@ -28,11 +28,11 @@ class AimConfig:
     head_boost: float = 0.35
     min_move: int = 2
     move_fraction: float = 0.5
-    max_step: int = 60
+    max_step: int = 250
     aim_lead: float = 0.0
     aim_floor: float = 2.0
-    arrive_px: float = 0.0     # 0 = latch off (hurt feel in-game)
-    resume_px: float = 10.0
+    arrive_px: float = 8.0
+    resume_px: float = 32.0   # > measured spike p50*2: spikes must not unlatch
     med_win: int = 1          # 1 = median off
     humanize: bool = False
     react_min: float = 120.0
@@ -46,7 +46,7 @@ class AimConfig:
     start_delay: float = 3.0
     aim_comp: int = 4
     burst: bool = True
-    burst_cooldown: float = 0.15
+    burst_cooldown: float = 0.28
     burst_gain: float = 0.95
     aim_cw: float = 1.0
     smoothing: float = 0.55
