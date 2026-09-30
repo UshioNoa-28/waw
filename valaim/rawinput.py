@@ -47,6 +47,11 @@ if sys.platform == "win32":
     user32.DefWindowProcW.argtypes = [
         wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
     ]
+    user32.GetRawInputData.restype = wintypes.UINT
+    user32.GetRawInputData.argtypes = [
+        wintypes.HANDLE, wintypes.UINT, ctypes.c_void_p,
+        ctypes.POINTER(wintypes.UINT), wintypes.UINT
+    ]
 
 
 class RAWINPUTHEADER(ctypes.Structure):
@@ -126,7 +131,8 @@ class _State:
             return list(reversed(self.events[-12:]))
 
 
-_state = _state = _State()
+_state = _State()
+_state_reason = ""
 _started = False
 _thread: threading.Thread | None = None
 _proc_ref = None
@@ -134,6 +140,10 @@ _proc_ref = None
 
 def available() -> bool:
     return _state.ok
+
+
+def failure_reason() -> str:
+    return _state_reason
 
 
 def start() -> bool:
@@ -166,10 +176,12 @@ def recent_events() -> list[str]:
 
 
 def _run() -> None:
+    global _state_reason
     try:
         _run_inner()
-    except Exception:
+    except Exception as exc:
         _state.ok = False
+        _state_reason = repr(exc)
 
 
 def _run_inner() -> None:
@@ -189,14 +201,17 @@ def _run_inner() -> None:
             user32.DefWindowProcW(hwnd, msg, wparam, lparam), ctypes.c_long
         ).value
 
+    global _proc_ref
     _proc_ref = WNDPROC(wnd_proc)
 
+    global _state_reason
     cls = WNDCLASSEXW()
     cls.cbSize = ctypes.sizeof(WNDCLASSEXW)
     cls.lpfnWndProc = ctypes.cast(_proc_ref, ctypes.c_void_p)
     cls.hInstance = hinst
     cls.lpszClassName = "ValAimRawSink"
     if not user32.RegisterClassExW(ctypes.byref(cls)):
+        _state_reason = f"RegisterClassExW err={ctypes.get_last_error()}"
         return
 
     hwnd = user32.CreateWindowExW(
@@ -205,6 +220,7 @@ def _run_inner() -> None:
         None, None, hinst, None,
     )
     if not hwnd:
+        _state_reason = f"CreateWindowExW err={ctypes.get_last_error()}"
         return
 
     devs = (RAWINPUTDEVICE * 2)(
@@ -215,6 +231,7 @@ def _run_inner() -> None:
         ctypes.byref(devs), 2, ctypes.sizeof(RAWINPUTDEVICE)
     )
     if not ok:
+        _state_reason = f"RegisterRawInputDevices err={ctypes.get_last_error()}"
         return
 
     _state.ok = True
@@ -226,16 +243,13 @@ def _run_inner() -> None:
 
 
 def _handle_input(lparam):
+    hraw = wintypes.HANDLE(lparam & 0xFFFFFFFFFFFFFFFF)
     size = wintypes.UINT(0)
-    user32.GetRawInputData(
-        wintypes.HANDLE(lparam), RID_INPUT, None, ctypes.byref(size), _HEADER
-    )
+    user32.GetRawInputData(hraw, RID_INPUT, None, ctypes.byref(size), _HEADER)
     if size.value < _HEADER + 8:
         return
     buf = ctypes.create_string_buffer(size.value)
-    got = user32.GetRawInputData(
-        wintypes.HANDLE(lparam), RID_INPUT, buf, ctypes.byref(size), _HEADER
-    )
+    got = user32.GetRawInputData(hraw, RID_INPUT, buf, ctypes.byref(size), _HEADER)
     if got == 0 or got == 0xFFFFFFFF:
         return
     raw = buf.raw[: size.value]

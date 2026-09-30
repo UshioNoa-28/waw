@@ -12,6 +12,7 @@ from .backend import OnnxDetector
 from .capture import ScreenCapture
 from .config import AimConfig
 from .input_ctrl import (
+    foreground_process,
     mouse_button_down,
     active_backend,
     close_backend,
@@ -82,6 +83,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--bt-test-radius", type=int, default=60)
     p.add_argument("--debug", action="store_true")
     p.add_argument("--max-frames", type=int, default=0)
+    p.add_argument("--game-process", default="VALORANT",
+                   help="Only act while a foreground process with this name runs ('' disables the gate)")
     return p.parse_args()
 
 
@@ -132,6 +135,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         bt_test_radius=args.bt_test_radius,
         debug=args.debug,
         max_frames=args.max_frames,
+        game_process=args.game_process.strip(),
     )
 
 
@@ -385,6 +389,15 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             active = mouse_button_down(cfg.hold_button)
         else:
             active = True
+        # Foreground gate: never move the mouse unless the game owns focus.
+        in_game = True
+        gate_note = ""
+        if cfg.game_process:
+            fpname = foreground_process()
+            in_game = bool(fpname) and cfg.game_process.upper() in fpname.upper()
+            if not in_game:
+                gate_note = f"游戏未在前台(当前:{fpname or '未知'})"
+        active = active and in_game
         target = selector.select(detections, cursor) if active else None
         dist = None
         action = ""
@@ -449,6 +462,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             status_text = f"idle | {key_txt} | detections={len(detections)}"
         else:
             status_text = f"idle | detections={len(detections)}"
+        if not active and gate_note:
+            status_text = f"idle | {gate_note}"
 
         now = time.monotonic()
         if status_text != last_status or now - last_log_time >= 1.0:

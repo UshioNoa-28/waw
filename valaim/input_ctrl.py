@@ -101,9 +101,49 @@ def _ensure_raw_input() -> None:
             _RAW = _ri
             print("[input] raw input sink active (button/key reads work while the game is focused)")
         else:
-            print("[input] raw input sink unavailable; falling back to GetAsyncKeyState", file=sys.stderr)
+            try:
+                from .rawinput import failure_reason
+                why = failure_reason()
+            except Exception:
+                why = ""
+            print(f"[input] raw input sink unavailable ({why}); falling back to GetAsyncKeyState", file=sys.stderr)
     except Exception as exc:
         print(f"[input] raw input init failed ({exc})", file=sys.stderr)
+
+
+def foreground_process() -> str:
+    """Name (not path) of the current foreground window's process, '' if unknown."""
+    if sys.platform != "win32":
+        return ""
+    try:
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.GetForegroundWindow.argtypes = []
+        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return ""
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
+        ]
+        h = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ""
+        try:
+            buf = ctypes.create_unicode_buffer(1024)
+            size = wintypes.DWORD(1024)
+            if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return os.path.basename(buf.value)
+            return ""
+        finally:
+            kernel32.CloseHandle(h)
+    except Exception:
+        return ""
 
 
 def raw_input_state() -> tuple[bool, list[str]]:

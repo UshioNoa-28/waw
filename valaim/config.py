@@ -58,3 +58,4 @@ class AimConfig:
     frame_sleep: float = 0.001
     fps: int = 60
     max_frames: int = 0
+    game_process: str = "VALORANT"
