@@ -31,10 +31,10 @@ class AimParams:
     comp_weight: float = 1.0      # fraction of in-flight move pre-subtracted from error
     comp_frames: int = 3          # assumed in-flight window, in loop frames
 
-    deadzone: float = 2.5         # stop inside this radius (px)
-    arrive_px: float = 5.0        # lock OFF the output inside this radius...
+    deadzone: float = 4.0         # stop inside this radius (px)
+    arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 10.0       # ...and only resume past this (hysteresis)
-    med_win: int = 5              # median filter width on raw error (px jitter)
+    med_win: int = 1              # median filter width on raw error (1=off)
     smoothing: float = 0.6        # EMA weight for new error (0=ignore,1=raw)
 
     # Humanization (measured from aim_lab: 60 trials, jit med 3.1px, bell rise,
@@ -126,7 +126,8 @@ class AimEngine:
         # error clearly exceeds resume_px. Humans stop micro-correcting noise;
         # chasing model jitter is exactly the "末端晃动" complaint.
         raw_dist = math.hypot(dx, dy)
-        if self._latched:
+        use_latch = p.arrive_px > 0
+        if use_latch and self._latched:
             if raw_dist <= p.resume_px:
                 self._carry_x = self._carry_y = 0.0
                 return 0, 0
@@ -154,7 +155,7 @@ class AimEngine:
         ey = self._sy + lead_y - infl_y
         dist = math.hypot(self._sx, self._sy)
 
-        if raw_dist <= p.arrive_px:
+        if use_latch and raw_dist <= p.arrive_px:
             self._latched = True
             self._carry_x = self._carry_y = 0.0
             return 0, 0

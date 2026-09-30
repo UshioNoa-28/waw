@@ -31,9 +31,9 @@ class AimConfig:
     max_step: int = 60
     aim_lead: float = 0.1
     aim_floor: float = 2.0
-    arrive_px: float = 5.0
+    arrive_px: float = 0.0     # 0 = latch off (hurt feel in-game)
     resume_px: float = 10.0
-    med_win: int = 5
+    med_win: int = 1          # 1 = median off
     humanize: bool = False
     react_min: float = 120.0
     react_max: float = 220.0
@@ -44,7 +44,7 @@ class AimConfig:
     aim_comp: int = 6
     aim_cw: float = 1.0
     smoothing: float = 0.7
-    deadzone: float = 2.5
+    deadzone: float = 4.0
     head_offset_y: float = 0.0
     aim_gain: float = 0.0
     calibrate: bool = False

@@ -70,9 +70,9 @@ def parse_args() -> argparse.Namespace:
                    choices=["none", "left", "right", "middle", "x1", "x2"],
                    help="Aim only while this mouse button is held (default: left)")
     p.add_argument("--fps", type=int, default=60, help="Cap the aim loop at this FPS (0 = unlimited)")
-    p.add_argument("--arrive-px", type=float, default=5.0, help="Lock output when error inside this (px)")
+    p.add_argument("--arrive-px", type=float, default=0.0, help="Lock output when error inside this (px); 0=off")
     p.add_argument("--resume-px", type=float, default=10.0, help="Unlock output when error exceeds this (px)")
-    p.add_argument("--med-win", type=int, default=5, help="Median filter width on detection error (0=off)")
+    p.add_argument("--med-win", type=int, default=1, help="Median filter width on detection error (1=off)")
     p.add_argument("--humanize", action="store_true", help="Reaction gate + ramp-in + tremor (human-like onset)")
     p.add_argument("--log-aim", action="store_true", help="Record per-frame error+commands to aim_trace.csv")
     p.add_argument("--triggerbot", action="store_true")
@@ -371,6 +371,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         trace = _csv.writer(trace_f)
         trace.writerow(["kind", "t", "a", "b"])
         trace.writerow(["meta", 0, cfg.aim_gain or cal_gain or 1.0, cfg.fps])
+        # row kinds: meta,cp,fps | err,cursor->target px | det,x,y,w,h,conf,cls | cmd,dx,dy
     log_file = log_path()
     last_log_time = 0.0
     last_status = ""
@@ -446,9 +447,13 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             if dist > cfg.min_move:
                 mx, my = engine.step(dx, dy, lx, ly)
                 if trace is not None:
-                    trace.writerow(["err", round(time.monotonic() - t0, 4), round(dx, 2), round(dy, 2)])
+                    tt = round(time.monotonic() - t0, 4)
+                    trace.writerow(["err", tt, round(dx, 2), round(dy, 2)])
+                    for d in detections:
+                        trace.writerow(["det", tt, round(d.x, 2), round(d.y, 2),
+                                        round(d.w, 2), round(d.h, 2), round(d.conf, 3), d.name])
                     if mx or my:
-                        trace.writerow(["cmd", round(time.monotonic() - t0, 4), mx, my])
+                        trace.writerow(["cmd", tt, mx, my])
                 if mx or my:
                     move_mouse(mx, my)
                     action = f"move {mx:+d},{my:+d}"
