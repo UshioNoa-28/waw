@@ -1,0 +1,27 @@
+name: Build ValAim EXE
+on:
+  push:
+    branches: [main]
+    paths:
+      - "valaim/**"
+      - "aimbot.py"
+      - "valaim.spec"
+      - "models/valorant_head_body/**"
+  workflow_dispatch:
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install numpy opencv-python mss onnxruntime-directml pyinstaller
+      - name: Build
+        run: python -m PyInstaller valaim.spec --noconfirm --clean
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ValAim-exe
+          path: dist/ValAim.exe
