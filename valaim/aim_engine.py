@@ -16,19 +16,22 @@ Design goals for this build: **stability**, not human-likeness.
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass
 
 
 @dataclass
 class AimParams:
-    move_fraction: float = 0.2    # P: fraction of the error per frame.
-                                  # Keep <= 0.25: the full actuation loop has
-                                  # ~4-5 frames of latency (capture+inference+
-                                  # BT+render) and higher gains self-oscillate.
-    max_step: int = 45            # hard cap on mouse counts per frame
+    move_fraction: float = 0.4    # P: fraction of the error per frame. Safe up
+                                  # to ~0.45 only together with in-flight comp
+                                  # (comp_frames); without comp keep <= 0.25.
+    max_step: int = 60            # hard cap on mouse counts per frame
     min_move: float = 1.0
+    min_speed: float = 2.0        # counts/frame floor outside the deadzone
+    comp_weight: float = 1.0      # fraction of in-flight move pre-subtracted from error
+    comp_frames: int = 3          # assumed in-flight window, in loop frames
 
-    deadzone: float = 2.0         # stop inside this radius (px)
+    deadzone: float = 2.5         # stop inside this radius (px)
     smoothing: float = 0.6        # EMA weight for new error (0=ignore,1=raw)
 
     # Human-like extras, off by default in the stable build.
@@ -55,11 +58,13 @@ class AimEngine:
         self._carry_x = 0.0             # sub-pixel remainder
         self._carry_y = 0.0
         self._overshoot_left = 0
+        self._hist = []               # (t, px_x, px_y) commands not yet rendered
 
     def reset(self) -> None:
         self._sx = self._sy = None
         self._carry_x = self._carry_y = 0.0
         self._overshoot_left = 0
+        self._hist = []
 
     def step(self, dx: float, dy: float,
              lead_x: float = 0.0, lead_y: float = 0.0) -> tuple[int, int]:
@@ -80,8 +85,18 @@ class AimEngine:
             self._sx += a * (dx - self._sx)
             self._sy += a * (dy - self._sy)
 
-        ex = self._sx + lead_x
-        ey = self._sy + lead_y
+        cp0 = max(0.05, p.counts_per_px)
+        # Smith-predictor style compensation: our commands only appear in the
+        # screenshot after the loop delay, so subtract everything still in
+        # flight; otherwise the loop re-sends moves it already ordered.
+        now = time.monotonic()
+        window = max(1, p.comp_frames) / 60.0
+        self._hist = [h for h in self._hist if now - h[0] <= window]
+        w = max(0.0, min(1.0, p.comp_weight))
+        infl_x = w * sum(h[1] for h in self._hist)
+        infl_y = w * sum(h[2] for h in self._hist)
+        ex = self._sx + lead_x - infl_x
+        ey = self._sy + lead_y - infl_y
         dist = math.hypot(self._sx, self._sy)
 
         if dist <= p.deadzone:
@@ -96,7 +111,7 @@ class AimEngine:
             self._overshoot_left -= 1
 
         # Pixel error -> mouse counts using the calibrated gain.
-        cp = max(0.05, p.counts_per_px)
+        cp = cp0
         step_x = ex * gain * cp + self._carry_x
         step_y = ey * gain * cp + self._carry_y
 
@@ -113,8 +128,20 @@ class AimEngine:
 
         ix = int(round(step_x))
         iy = int(round(step_y))
-        self._carry_x = step_x - ix
-        self._carry_y = step_y - iy
+
+        # Speed floor: outside the deadzone never crawl below min_speed,
+        # otherwise the final stretch feels sluggish (exponential tail).
+        floor = max(0, p.min_speed)
+        if floor and dist > p.deadzone:
+            if abs(ix) < floor and ex != 0:
+                ix = int(math.copysign(floor, ex))
+            if abs(iy) < floor and ey != 0:
+                iy = int(math.copysign(floor, ey))
+
+        self._carry_x = step_x - ix if abs(step_x) >= floor or ix == 0 else 0.0
+        self._carry_y = step_y - iy if abs(step_y) >= floor or iy == 0 else 0.0
+        if ix or iy:
+            self._hist.append((now, ix / cp, iy / cp))
 
         return ix, iy
 

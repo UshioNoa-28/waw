@@ -86,6 +86,7 @@ NUMERIC = {
     "move_fraction": float, "max_step": int, "smoothing": float,
     "deadzone": float, "fps": int, "trigger_radius": int, "aim_gain": float,
     "aim_lead": float, "sens": float, "fire_radius": int,
+    "aim_floor": float, "aim_comp": int, "aim_cw": float,
 }
 
 
@@ -262,6 +263,9 @@ button:disabled{opacity:.4;cursor:default}
 <div class="card"><h2>移动手感</h2>
 <div class="row"><label>移动系数(越大越猛)</label><input type=range id="move_fraction" min=0.05 max=1 step=0.01><span class=val id="move_fraction_v"></span></div>
 <div class="row"><label>移动提前量(秒,补延迟)</label><input type=range id="aim_lead" min=0 max=0.3 step=0.01><span class=val id="aim_lead_v"></span></div>
+<div class="row"><label>在途补偿(帧,0=关)</label><input type=range id="aim_comp" min=0 max=8 step=1><span class=val id="aim_comp_v"></span></div>
+<div class="row"><label>补偿权重</label><input type=range id="aim_cw" min=0 max=1 step=0.05><span class=val id="aim_cw_v"></span></div>
+<div class="row"><label>最低速度(计数/帧)</label><input type=range id="aim_floor" min=0 max=6 step=0.5><span class=val id="aim_floor_v"></span></div>
 <div class="row"><label>每帧最大移动(计数)</label><input type=range id="max_step" min=2 max=127 step=1><span class=val id="max_step_v"></span></div>
 <div class="row"><label>平滑(越小越稳)</label><input type=range id="smoothing" min=0.05 max=1 step=0.01><span class=val id="smoothing_v"></span></div>
 <div class="row"><label>死区(像素)</label><input type=range id="deadzone" min=0 max=10 step=0.5><span class=val id="deadzone_v"></span></div>
@@ -288,8 +292,8 @@ button:disabled{opacity:.4;cursor:default}
 <div id="status">加载中...</div>
 
 <script>
-const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","aim_lead","fire_radius","fps"];
-const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0};
+const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","aim_lead","aim_comp","aim_cw","aim_floor","fire_radius","fps"];
+const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,aim_comp:0,aim_cw:2,aim_floor:1,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0};
 const KEYMAP={"Space":"SPACE","Tab":"TAB","Enter":"ENTER"};
 function codeToName(code){
   let m;

@@ -107,6 +107,9 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         head_bias=args.head_bias,
         head_offset_y=args.head_offset_y,
         aim_lead=args.aim_lead,
+        aim_floor=args.aim_floor,
+        aim_comp=args.aim_comp,
+        aim_cw=args.aim_cw,
         smoothing=args.smoothing,
         deadzone=args.deadzone,
         aim_gain=args.aim_gain,
@@ -365,6 +368,9 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.min_move = cfg.min_move
         engine.p.smoothing = cfg.smoothing
         engine.p.deadzone = cfg.deadzone
+        engine.p.min_speed = cfg.aim_floor
+        engine.p.comp_frames = cfg.aim_comp
+        engine.p.comp_weight = max(0.0, min(1.0, cfg.aim_cw))
         engine.p.counts_per_px = cfg.aim_gain if cfg.aim_gain > 0 else (cal_gain or 1.0)
         img, crop_x, crop_y, crop_w, crop_h = capture.grab()
         detections = detector.detect(img, crop_x, crop_y)
