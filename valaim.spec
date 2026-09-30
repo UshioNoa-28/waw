@@ -14,7 +14,7 @@ MODEL_REL = os.path.join("models", "valorant_head_body")
 
 datas = []
 binaries = []
-hiddenimports = ["tkinter"]
+hiddenimports = []
 
 for pkg in ("onnxruntime", "cv2", "mss", "numpy"):
     d, b, h = collect_all(pkg)

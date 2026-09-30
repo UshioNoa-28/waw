@@ -30,7 +30,7 @@ def run() -> None:
         cli_main()
         return
 
-    from valaim.gui import main as gui_main
+    from valaim.webgui import main as gui_main
     gui_main()
 
 
