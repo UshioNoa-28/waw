@@ -55,6 +55,8 @@ class HidMouseController(
                 BluetoothProfile.STATE_CONNECTED -> {
                     hostDevice = device
                     connected = true
+                    lastConnectedAt = System.currentTimeMillis()
+                    lastHostMac = device.address
                     onState("CONNECTED to PC - releasing buttons")
                     // The host may remember a stuck button state from a last
                     // session that ended abruptly; clear it immediately.
@@ -66,7 +68,19 @@ class HidMouseController(
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     if (hostDevice == device) hostDevice = null
                     connected = false
-                    onState("PC disconnected")
+                    val dt = System.currentTimeMillis() - lastConnectedAt
+                    if (lastConnectedAt > 0 && dt < 8_000) {
+                        flapCount++
+                        if (flapCount >= 3) {
+                            autoConnectPaused = true
+                            onState("链路抖动(连上即断 x$flapCount) - 已暂停自动重连,点【重置HID注册】或手机蓝牙里取消配对后重配")
+                        } else {
+                            onState("PC disconnected (flap $flapCount/3)")
+                        }
+                    } else {
+                        flapCount = 0
+                        onState("PC disconnected")
+                    }
                 }
             }
         }
@@ -137,9 +151,14 @@ class HidMouseController(
         }.start()
     }
 
-    /** Try to connect as HID to every bonded device (fails fast for non-PCs). */
+    /**
+     * Connect candidates: this session's last host, or bonded devices whose
+     * name looks like a computer (DESKTOP-*/LAPTOP-*/...), or the only bonded
+     * device if there is exactly one. Never spray connect() at earbuds etc.
+     */
     @SuppressLint("MissingPermission")
     private fun tryConnectBonded() {
+        if (autoConnectPaused) return
         val hd = hidDevice ?: return
         val bonded = try {
             adapter?.bondedDevices?.toList()
@@ -151,9 +170,15 @@ class HidMouseController(
             val names = bonded.joinToString(", ") {
                 try { it.name ?: it.address } catch (_: SecurityException) { it.address }
             }
-            onState("paired on phone: ${if (names.isEmpty()) "NOTHING - pair it!" else names}")
+            onState("手机已配对: ${if (names.isEmpty()) "无 - 请在 Windows 配对" else names}")
         }
-        for (dev in bonded) {
+        val candidates = bonded.filter { dev ->
+            val mac = dev.address
+            if (lastHostMac != null && mac.equals(lastHostMac, true)) return@filter true
+            val nm = try { dev.name } catch (_: SecurityException) { null } ?: ""
+            PC_NAME.containsMatchIn(nm) || (bonded.size == 1)
+        }
+        for (dev in candidates) {
             try {
                 hd.connect(dev)
             } catch (_: Exception) {
@@ -162,20 +187,36 @@ class HidMouseController(
     }
 
     @Volatile private var bondedListReported = false
+    @Volatile private var lastHostMac: String? = null       // this session only
+    @Volatile private var autoConnectPaused = false
+    @Volatile private var lastConnectedAt = 0L
+    @Volatile private var flapCount = 0
+    private val PC_NAME = Regex("(?i)(DESKTOP|LAPTOP|THINKPAD|XPS|MATEBOOK|PC[-_]|WIN[-_]|-PC$)")
 
     /** Hard reset of the app-side registration without touching pairing data. */
     @SuppressLint("MissingPermission")
     fun forceReRegister() {
         bondedListReported = false
-        val dev = hidDevice
-        try { dev?.unregisterApp() } catch (_: Exception) {}
+        autoConnectPaused = false
+        flapCount = 0
+        lastConnectedAt = 0
+        val hd = hidDevice
+        val host = hostDevice
+        if (hd != null && host != null) {
+            try { hd.disconnect(host) } catch (_: Exception) {}
+        }
+        try { hd?.unregisterApp() } catch (_: Exception) {}
         registered = false
         connected = false
         hostDevice = null
         manualStop = false
+        onState("HID 已重置,重新注册中...")
         Thread {
             try { Thread.sleep(600) } catch (_: InterruptedException) {}
             reregister()
+            // After re-register, try the host we had this session (or scan again).
+            try { Thread.sleep(1200) } catch (_: InterruptedException) {}
+            if (!connected) startReconnectLoop()
         }.start()
     }
 
