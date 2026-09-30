@@ -5,6 +5,7 @@ sliders. Uses only the Python standard library (http.server, json, webbrowser),
 so it packages cleanly into the exe - no tkinter, no Electron, no extra deps.
 
 Launch the exe and your browser opens at http://127.0.0.1:8765 automatically.
+Closing the tab exits the program (pagehide beacon + idle watchdog).
 """
 
 from __future__ import annotations
@@ -19,7 +20,6 @@ from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .config import AimConfig
-from .resources import resolve_model_path
 
 CONFIG_FILE = "valaim_gui.json"
 HOST = "127.0.0.1"
@@ -56,20 +56,26 @@ def load_config() -> AimConfig:
                     setattr(cfg, k, v)
         except (OSError, ValueError):
             pass
-    # Frozen exe: a relative model path must be resolved to the bundled copy
-    # (PyInstaller unpacks datas to a temp dir), otherwise onnxruntime fails
-    # with NO_SUCHFILE because the CWD has no models/ folder.
-    cfg.model_path = resolve_model_path(cfg.model_path)
+    # Frozen exe: a relative model path must be resolved to the bundled copy.
+    cfg.model_path = resolve_model_path_safe(cfg.model_path)
     if cfg.model_info:
-        cfg.model_info = resolve_model_path(cfg.model_info)
+        cfg.model_info = resolve_model_path_safe(cfg.model_info)
     return cfg
+
+
+def resolve_model_path_safe(path: str) -> str:
+    try:
+        from .resources import resolve_model_path
+
+        return resolve_model_path(path)
+    except Exception:
+        return path
 
 
 def save_config(cfg: AimConfig) -> None:
     try:
         with open(_config_path(), "w", encoding="utf-8") as f:
             json.dump(asdict(cfg), f, indent=2)
-        return
     except OSError:
         pass
 
@@ -79,7 +85,7 @@ NUMERIC = {
     "head_bias": float, "head_offset_y": float,
     "move_fraction": float, "max_step": int, "smoothing": float,
     "deadzone": float, "fps": int, "trigger_radius": int, "aim_gain": float,
-    "fire_radius": int,
+    "aim_lead": float, "sens": float, "fire_radius": int,
 }
 
 
@@ -91,7 +97,6 @@ class Panel:
         self.running = False
         self.stop_flag = threading.Event()
         self.worker: threading.Thread | None = None
-        self.fix_result = ""
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -99,16 +104,13 @@ class Panel:
             data["target_classes"] = " ".join(self.cfg.target_classes)
             data["status"] = self.status
             data["running"] = self.running
-            data["fix_result"] = self.fix_result
         try:
             from .input_ctrl import raw_input_state
 
-            active, events = raw_input_state()
+            active, _events = raw_input_state()
             data["raw_sink"] = active
-            data["events"] = events
         except Exception:
             data["raw_sink"] = False
-            data["events"] = []
         return data
 
     def apply(self, patch: dict) -> str | None:
@@ -154,14 +156,13 @@ class Panel:
             return "已经在运行"
         if not self.cfg.bt_host:
             return "请先填写手机 IP"
-        path = resolve_model_path(self.cfg.model_path)
+        path = resolve_model_path_safe(self.cfg.model_path)
         if not os.path.exists(path):
             return f"模型文件不存在: {self.cfg.model_path}"
         self.cfg.model_path = path
         self.stop_flag.clear()
         self.running = True
         self.status = "启动中..."
-        self.fix_result = ""
         self.worker = threading.Thread(target=self._run, daemon=True)
         self.worker.start()
         return "started"
@@ -198,22 +199,9 @@ class Panel:
             except Exception:
                 pass
             self.running = False
-            if self.status.startswith("启动中") or "Starting" in self.status:
-                self.status = "已停止"
 
 
 PANEL = Panel()
-
-
-def _run_fix() -> None:
-    try:
-        from .btclean import run
-
-        code = run()
-        PANEL.fix_result = f"修复完成(code={code}),蓝牙开关关5秒再开,然后重新配对" if code == 0 else "修复失败,请用管理员cmd运行 ValAim.exe --cli --bt-clean 看报错"
-    except Exception as exc:  # noqa: BLE001
-        PANEL.fix_result = f"修复出错: {exc}"
-
 
 
 PAGE = """<!doctype html>
@@ -237,41 +225,45 @@ button{border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:6
 #start{background:var(--ok);color:#06281b}
 #stop{background:#ef4444;color:#2b0606}
 #save{background:#374151;color:#e5e7eb}
+#quit{background:#3f3f46;color:#fde68a}
 button:disabled{opacity:.4;cursor:default}
 .bar{display:flex;gap:10px;margin:14px 0}
-#quit{background:#3f3f46;color:#fde68a}
-#fix{background:#7c3aed;color:#ede9fe}
 #status{background:var(--card);border-left:3px solid var(--acc);border-radius:6px;padding:10px 12px;font-size:13px;min-height:40px;color:var(--fg)}
 #status.run{border-color:var(--ok)}
 #status.err{border-color:#ef4444}
 .hint{color:var(--mut);font-size:12px;margin-top:4px}
-pre{background:#101316;border-radius:6px;padding:8px 10px;color:#9ae6b4;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:180px;overflow:auto;margin:8px 0 0}
 </style></head><body><div class="wrap">
 <h1>ValAim 控制台</h1>
 
 <div class="card"><h2>手机(蓝牙 HID 桥接)</h2>
 <div class="row"><label>手机 IP(看 App 显示)</label><input type=text id="bt_host" size=16>
 <label style="flex:0 0 auto">端口</label><input type=text id="bt_port" size=7></div>
-<div class="hint">手机上打开 BtAimBridge,点 START,在 Windows 蓝牙里配对,然后把 App 里显示的 IP 填进来。</div>
+<div class="hint">手机打开 BtAimBridge,点 START,在 Windows 蓝牙里配对,然后把 App 显示的 IP 填进来。</div>
+</div>
+
+<div class="card"><h2>增益(计数/像素)</h2>
+<div class="row"><label>游戏内灵敏度(>0 用公式)</label><input type=text id="sens" size=8></div>
+<div class="row"><label>手动增益(0=自动)</label><input type=range id="aim_gain" min=0 max=5 step=0.05><span class=val id="aim_gain_v"></span></div>
+<div class="hint">优先用标定文件 valaim_calib.json;留空/0 则按灵敏度公式自动算。</div>
 </div>
 
 <div class="card"><h2>瞄准点</h2>
-<div class="row"><label>头部偏置(0=顶部, 1=底部)</label><input type=range id="head_bias" min=0 max=1 step=0.01><span class=val id="head_bias_v"></span></div>
-<div class="row"><label>头部纵向偏移(像素,向下)</label><input type=range id="head_offset_y" min=-30 max=80 step=1><span class=val id="head_offset_y_v"></span></div>
+<div class="row"><label>头部偏置(0顶 1底)</label><input type=range id="head_bias" min=0 max=1 step=0.01><span class=val id="head_bias_v"></span></div>
+<div class="row"><label>头部纵向偏移(px)</label><input type=range id="head_offset_y" min=-30 max=80 step=1><span class=val id="head_offset_y_v"></span></div>
 </div>
 
 <div class="card"><h2>检测</h2>
 <div class="row"><label>目标类别(空格分隔)</label><input type=text id="classes" size=18></div>
-<div class="row"><label>视野半径 FOV(像素)</label><input type=range id="fov_radius" min=20 max=500 step=5><span class=val id="fov_radius_v"></span></div>
+<div class="row"><label>视野半径 FOV(px)</label><input type=range id="fov_radius" min=20 max=500 step=5><span class=val id="fov_radius_v"></span></div>
 <div class="row"><label>置信度阈值</label><input type=range id="conf_threshold" min=0.05 max=0.95 step=0.01><span class=val id="conf_threshold_v"></span></div>
 </div>
 
 <div class="card"><h2>移动手感</h2>
 <div class="row"><label>移动系数(越大越猛)</label><input type=range id="move_fraction" min=0.05 max=1 step=0.01><span class=val id="move_fraction_v"></span></div>
-<div class="row"><label>每帧最大移动(像素)</label><input type=range id="max_step" min=2 max=127 step=1><span class=val id="max_step_v"></span></div>
-<div class="row"><label>平滑度(越小越稳)</label><input type=range id="smoothing" min=0.05 max=1 step=0.01><span class=val id="smoothing_v"></span></div>
+<div class="row"><label>移动提前量(秒,补延迟)</label><input type=range id="aim_lead" min=0 max=0.3 step=0.01><span class=val id="aim_lead_v"></span></div>
+<div class="row"><label>每帧最大移动(计数)</label><input type=range id="max_step" min=2 max=127 step=1><span class=val id="max_step_v"></span></div>
+<div class="row"><label>平滑(越小越稳)</label><input type=range id="smoothing" min=0.05 max=1 step=0.01><span class=val id="smoothing_v"></span></div>
 <div class="row"><label>死区(像素)</label><input type=range id="deadzone" min=0 max=10 step=0.5><span class=val id="deadzone_v"></span></div>
-<div class="row"><label>鼠标增益(计数/像素,0=自动校准)</label><input type=range id="aim_gain" min=0 max=3 step=0.05><span class=val id="aim_gain_v"></span></div>
 <div class="row"><label>帧率上限</label><input type=range id="fps" min=30 max=240 step=5><span class=val id="fps_v"></span></div>
 </div>
 
@@ -279,8 +271,7 @@ pre{background:#101316;border-radius:6px;padding:8px 10px;color:#9ae6b4;font-fam
 <div class="row"><label>始终开启(不用按键)</label><input type=checkbox id="always_on"><label style="flex:0 0 auto">或按住键</label><input type=text id="trigger" size=10></div>
 <div class="row"><label>开火键 x1/x2/middle/right</label><input type=text id="fire_button" size=10>
 <label style="flex:0 0 auto">锁定半径px</label><input type=range id="fire_radius" min=4 max=60 step=2 style="flex:1"><span class=val id="fire_radius_v"></span></div>
-<div class="hint">开火键模式:按住侧键(如 x1)→ 自动吸附 → 锁定后手机替你按左键开火,松开即停。此时不要用物理左键射击。</div>
-<div class="row"><label>自动开火(吸到就打)</label><input type=checkbox id="triggerbot"></div>
+<div class="hint">开火键模式:按住侧键 → 自动吸附 → 锁定后手机替你按左键开火,松开即停。此时不要用物理左键射击。</div>
 <div class="row"><label>显示画面预览(debug 窗口)</label><input type=checkbox id="debug"></div>
 </div>
 
@@ -288,22 +279,15 @@ pre{background:#101316;border-radius:6px;padding:8px 10px;color:#9ae6b4;font-fam
 <button id="start">启 动</button>
 <button id="stop">停 止</button>
 <button id="save">保 存</button>
-<button id="fix">配对修复</button>
 <button id="quit">退出程序</button>
 </div>
 
 <div id="status">加载中...</div>
 
-<div class="card" style="margin-top:12px"><h2>输入诊断</h2>
-<div class="hint" id="rawinfo">检测中...</div>
-<pre id="events">按任意鼠标键/键盘键,这里应实时出现 DOWN/UP;进游戏按住侧键看是否还有事件 = 是否被吞</pre>
-</div>
-
 <script>
-const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","fire_radius","fps"];
-const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0,fire_radius:0};
+const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","aim_lead","fire_radius","fps"];
+const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0};
 function fill(s){
-  // Never overwrite the field the user is typing into.
   const act=document.activeElement;
   for(const id of ["bt_host","bt_port","classes","trigger","fire_button"]){
     const el=document.getElementById(id);
@@ -312,7 +296,8 @@ function fill(s){
       if(el.value!==want) el.value=want;
     }
   }
-  const a=document.getElementById("always_on"); if(a!==act) a.checked=!s.keybind&&!s.hold_button;
+  const sv=document.getElementById("sens"); if(sv!==act) sv.value=s.sens>0?s.sens:"";
+  const a=document.getElementById("always_on"); if(a!==act) a.checked=!s.keybind&&!s.hold_button&&!s.fire_button;
   const tb=document.getElementById("triggerbot"); if(tb!==act) tb.checked=!!s.triggerbot;
   const dg=document.getElementById("debug"); if(dg!==act) dg.checked=!!s.debug;
   for(const k of NUM){
@@ -321,14 +306,10 @@ function fill(s){
     document.getElementById(k+"_v").textContent=(+s[k]).toFixed(DEC[k]??1);
   }
   const st=document.getElementById("status");
-  st.textContent=s.fix_result||s.status;
-  st.className=s.running?"run":(s.status.startsWith("错误")||s.status.startsWith("Error")?"err":"");
+  st.textContent=s.status;
+  st.className=s.running?"run":(s.status.startsWith("错误")?"err":"");
   document.getElementById("start").disabled=s.running;
   document.getElementById("stop").disabled=!s.running;
-  const ri=document.getElementById("rawinfo");
-  if(ri) ri.textContent=s.raw_sink?"RawInput 监听:运行中(游戏焦点下也能读到按键)":"RawInput 监听:未启用,回退 GetAsyncKeyState";
-  const ev=document.getElementById("events");
-  if(ev&&s.events) ev.textContent=s.events.length?s.events.join("\n"):"(还没有收到任何按键事件)";
 }
 async function poll(){
   try{ fill(await(await fetch("/state")).json()); }
@@ -345,25 +326,17 @@ function track(id){
   else{ el.addEventListener("input",push); el.addEventListener("change",push); }
 }
 NUM.forEach(track);
-["bt_host","bt_port","classes","trigger","fire_button","always_on","triggerbot","debug"].forEach(track);
+["bt_host","bt_port","classes","trigger","fire_button","sens","always_on","triggerbot","debug"].forEach(track);
 function postp(path){return fetch(path,{method:"POST"});}
 document.getElementById("start").onclick=async()=>{
   await send({bt_host:document.getElementById("bt_host").value,bt_port:document.getElementById("bt_port").value});
   const t=await(await postp("/start")).text();
   document.getElementById("status").textContent=t==="started"?"启动中...":("错误: "+t);
 };
-document.getElementById("stop").onclick=async()=>{
-  const t=await(await postp("/stop")).text();
-  document.getElementById("status").textContent="已停止";
-};
+document.getElementById("stop").onclick=async()=>{ await postp("/stop"); };
 document.getElementById("save").onclick=async()=>{
   const t=await(await postp("/save")).text();
   document.getElementById("status").textContent=t==="saved"?"已保存":"保存失败";
-};
-document.getElementById("fix").onclick=async()=>{
-  document.getElementById("status").textContent="修复中...需要管理员权限,若失败请用管理员cmd跑 ValAim.exe --cli --bt-clean";
-  const t=await(await postp("/fix")).text();
-  document.getElementById("status").textContent=t;
 };
 document.getElementById("quit").onclick=async()=>{
   document.getElementById("status").textContent="已退出,可关闭本页面。";
@@ -404,18 +377,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             patch = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
-            self._send(400, b"bad json", "text/plain")
-            return
+            patch = {}
         if self.path == "/set":
             err = PANEL.apply(patch)
             self._send(400 if err else 200, (err or "ok").encode(), "text/plain")
         elif self.path == "/bye":
-            # Fired by the page on unload (tab closed / browser closed).
             _session["bye"] = True
             self._send(200, b"bye", "text/plain")
-        elif self.path == "/fix":
-            threading.Thread(target=_run_fix, daemon=True).start()
-            self._send(200, b"fix started", "text/plain")
         elif self.path == "/start":
             self._send(200, PANEL.start().encode(), "text/plain")
         elif self.path == "/stop":
@@ -430,8 +398,6 @@ class Handler(BaseHTTPRequestHandler):
 def _shutdown(server: ThreadingHTTPServer) -> None:
     save_config(PANEL.cfg)
     PANEL.stop_flag.set()
-    # Let the aim worker finish its cleanup (release virtual mouse buttons,
-    # flush the socket) before hard-exiting.
     worker = PANEL.worker
     if worker is not None and worker.is_alive():
         worker.join(timeout=1.5)

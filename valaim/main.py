@@ -48,8 +48,10 @@ def parse_args() -> argparse.Namespace:
                    help="Vertical aim point inside a head box (0=top, 1=bottom; default 0.55)")
     p.add_argument("--head-offset-y", type=float, default=0.0,
                    help="Extra downward aim offset in capture pixels (use if it aims too high)")
-    p.add_argument("--move-fraction", type=float, default=0.3)
+    p.add_argument("--move-fraction", type=float, default=0.2)
     p.add_argument("--max-step", type=int, default=45, help="Max counts moved per frame (slew limit)")
+    p.add_argument("--aim-lead", type=float, default=0.1,
+                   help="Target-motion prediction in seconds (covers actuation latency)")
     p.add_argument("--smoothing", type=float, default=0.6,
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
     p.add_argument("--deadzone", type=float, default=2.0, help="Stop radius in pixels")
@@ -60,7 +62,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--calib-file", default="", help="Calibration json path (default valaim_calib.json)")
     p.add_argument("--calibrate", action="store_true", help="Runtime probe calibration (last resort)")
     p.add_argument("--calibrate-tool", action="store_true", help="Run offline gain calibration and exit")
-    p.add_argument("--bt-clean", action="store_true", help="Remove stale BtAimBridge devices from Windows and exit (admin)")
     p.add_argument("--calib-countdown", type=float, default=8.0,
                    help="Seconds to switch back to the game before calibration starts")
     p.add_argument("--key", default="none", help="Hold this key to aim (default: none = always on)")
@@ -105,6 +106,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         head_height=args.head_height,
         head_bias=args.head_bias,
         head_offset_y=args.head_offset_y,
+        aim_lead=args.aim_lead,
         smoothing=args.smoothing,
         deadzone=args.deadzone,
         aim_gain=args.aim_gain,
@@ -343,6 +345,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     clicking = False
     shooting = False
     frames = 0
+    vel: dict = {}
     log_file = log_path()
     last_log_time = 0.0
     last_status = ""
@@ -385,8 +388,23 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             dy = target.y - cursor[1]
             dist = math.hypot(dx, dy)
 
+            # Target screen-velocity estimate (px/s) for lead compensation.
+            nowt = time.monotonic()
+            tid = id(target.det)
+            if tid != vel.get("id") or nowt - vel.get("t", 0.0) > 0.4:
+                vel.update(id=tid, x=target.x, y=target.y, t=nowt, vx=0.0, vy=0.0)
+            else:
+                ddt = max(0.008, nowt - vel["t"])
+                raw_vx = (target.x - vel["x"]) / ddt
+                raw_vy = (target.y - vel["y"]) / ddt
+                vel["vx"] = 0.7 * vel["vx"] + 0.3 * raw_vx
+                vel["vy"] = 0.7 * vel["vy"] + 0.3 * raw_vy
+                vel.update(x=target.x, y=target.y, t=nowt)
+            lead = max(0.0, min(0.3, cfg.aim_lead))
+            lx, ly = vel["vx"] * lead, vel["vy"] * lead
+
             if dist > cfg.min_move:
-                mx, my = engine.step(dx, dy)
+                mx, my = engine.step(dx, dy, lx, ly)
                 if mx or my:
                     move_mouse(mx, my)
                     action = f"move {mx:+d},{my:+d}"
@@ -464,10 +482,6 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
 
 def main() -> None:
     args = parse_args()
-    if args.bt_clean:
-        from .btclean import run as clean_run
-
-        raise SystemExit(clean_run())
     cfg = config_from_args(args)
     if args.calibrate_tool:
         from .calibrate import run_calibration

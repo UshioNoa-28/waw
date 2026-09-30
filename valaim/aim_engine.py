@@ -21,8 +21,11 @@ from dataclasses import dataclass
 
 @dataclass
 class AimParams:
-    move_fraction: float = 0.3   # fraction of the (smoothed) error per frame
-    max_step: int = 45            # hard cap on pixels per frame
+    move_fraction: float = 0.2    # P: fraction of the error per frame.
+                                  # Keep <= 0.25: the full actuation loop has
+                                  # ~4-5 frames of latency (capture+inference+
+                                  # BT+render) and higher gains self-oscillate.
+    max_step: int = 45            # hard cap on mouse counts per frame
     min_move: float = 1.0
 
     deadzone: float = 2.0         # stop inside this radius (px)
@@ -58,8 +61,15 @@ class AimEngine:
         self._carry_x = self._carry_y = 0.0
         self._overshoot_left = 0
 
-    def step(self, dx: float, dy: float) -> tuple[int, int]:
-        """Return a relative mouse step for the current pixel error."""
+    def step(self, dx: float, dy: float,
+             lead_x: float = 0.0, lead_y: float = 0.0) -> tuple[int, int]:
+        """Return a relative mouse step for the current pixel error.
+
+        lead_x/lead_y are caller-computed target-motion predictions (px); they
+        are added AFTER smoothing so target velocity never feeds back through
+        our own actuation latency (which is what made a measurement-derivative
+        term unstable here).
+        """
         p = self.p
 
         # Exponential moving average of the target error (damps model jitter).
@@ -70,8 +80,9 @@ class AimEngine:
             self._sx += a * (dx - self._sx)
             self._sy += a * (dy - self._sy)
 
-        ex, ey = self._sx, self._sy
-        dist = math.hypot(ex, ey)
+        ex = self._sx + lead_x
+        ey = self._sy + lead_y
+        dist = math.hypot(self._sx, self._sy)
 
         if dist <= p.deadzone:
             self._carry_x = self._carry_y = 0.0
@@ -84,9 +95,7 @@ class AimEngine:
             gain *= p.overshoot_factor
             self._overshoot_left -= 1
 
-        # Pixel error -> mouse counts using the calibrated gain. Without this
-        # the loop emits counts assuming 1:1 and overshoots whenever one count
-        # turns more pixels on screen.
+        # Pixel error -> mouse counts using the calibrated gain.
         cp = max(0.05, p.counts_per_px)
         step_x = ex * gain * cp + self._carry_x
         step_y = ey * gain * cp + self._carry_y
@@ -98,6 +107,9 @@ class AimEngine:
             scale = limit / mag
             step_x *= scale
             step_y *= scale
+            # The clamp is not a queue: dropped remainder must NOT wind up
+            # into the carry or the crosshair jumps when the error shrinks.
+            self._carry_x = self._carry_y = 0.0
 
         ix = int(round(step_x))
         iy = int(round(step_y))
