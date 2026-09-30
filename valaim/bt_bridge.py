@@ -96,18 +96,29 @@ class BtBridge:
             time.sleep(0)
 
     def _pump(self) -> None:
+        last_tx = time.monotonic()
         while self._running:
             with self._cond:
-                while self._running and not self._queue:
+                if not self._queue:
                     self._cond.wait(timeout=0.5)
                 batch = b"".join(self._queue)
                 self._queue.clear()
                 sock = self._sock
             if sock is None:
                 return
-            if not batch:
-                continue
-            sock.sendall(batch)
+            now = time.monotonic()
+            try:
+                if batch:
+                    sock.sendall(batch)
+                elif now - last_tx > 3.0:
+                    # Periodic keepalive: distinguishes an idle aim loop from
+                    # a dead connection.
+                    sock.sendall(b"P\n")
+                else:
+                    continue
+            except OSError:
+                raise
+            last_tx = now
 
     def _drop(self) -> None:
         with self._lock:
@@ -154,6 +165,15 @@ class BtBridge:
         return self._last_error
 
     def close(self) -> None:
+        # Make sure the host sees "no buttons held" before the socket dies,
+        # otherwise a stuck virtual left click survives this session.
+        try:
+            sock = self._sock
+            if sock is not None:
+                sock.sendall(b"B 0\nP\n")
+                time.sleep(0.2)
+        except OSError:
+            pass
         self._running = False
         with self._cond:
             self._cond.notify_all()

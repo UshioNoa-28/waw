@@ -27,7 +27,11 @@ def run() -> None:
                 argv += ["--input-backend", "bt"]
         sys.argv = [sys.argv[0]] + argv
         from valaim.main import main as cli_main
-        cli_main()
+        try:
+            cli_main()
+        finally:
+            from valaim.input_ctrl import close_backend
+            close_backend()
         return
 
     from valaim.webgui import main as gui_main

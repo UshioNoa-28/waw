@@ -188,6 +188,12 @@ class Panel:
         except Exception as exc:  # noqa: BLE001
             self.status = f"错误: {exc}"
         finally:
+            try:
+                from .input_ctrl import close_backend
+
+                close_backend()
+            except Exception:
+                pass
             self.running = False
             if self.status.startswith("启动中") or "Starting" in self.status:
                 self.status = "已停止"
@@ -400,6 +406,11 @@ class Handler(BaseHTTPRequestHandler):
 def _shutdown(server: ThreadingHTTPServer) -> None:
     save_config(PANEL.cfg)
     PANEL.stop_flag.set()
+    # Let the aim worker finish its cleanup (release virtual mouse buttons,
+    # flush the socket) before hard-exiting.
+    worker = PANEL.worker
+    if worker is not None and worker.is_alive():
+        worker.join(timeout=1.5)
     print("Panel closed - exiting ValAim.")
     threading.Thread(target=server.shutdown, daemon=True).start()
     time.sleep(0.3)

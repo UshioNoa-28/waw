@@ -55,7 +55,13 @@ class HidMouseController(
                 BluetoothProfile.STATE_CONNECTED -> {
                     hostDevice = device
                     connected = true
-                    onState("CONNECTED to PC")
+                    onState("CONNECTED to PC - releasing buttons")
+                    // The host may remember a stuck button state from a last
+                    // session that ended abruptly; clear it immediately.
+                    try {
+                        hidDevice?.sendReport(device, 0, MouseReport.build(0, 0, 0, 0))
+                    } catch (_: SecurityException) {
+                    }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     if (hostDevice == device) hostDevice = null

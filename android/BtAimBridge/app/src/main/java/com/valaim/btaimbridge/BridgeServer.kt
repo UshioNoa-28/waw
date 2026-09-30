@@ -4,17 +4,24 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
 import kotlin.concurrent.thread
 
 /**
- * TCP server. Accepts a single PC client and parses the tiny line protocol:
+ * TCP server. Accepts a PC client and parses the tiny line protocol:
  *
- *   "M <dx> <dy>\n"    relative mouse move
- *   "B <mask>\n"       set button mask (bit0 left, bit1 right, bit2 middle)
- *   "W <ticks>\n"      wheel
- *   "P\n"              ping / keepalive
+ *   "M <dx> <dy>\n"   relative mouse move
+ *   "B <mask>\n"      set button mask (bit0 left, bit1 right, bit2 middle)
+ *   "W <ticks>\n"     wheel
+ *   "P\n"             keepalive ping
  *
- * Coordinates are already in mouse counts; the PC side applies sensitivity.
+ * Robustness rules (learned the hard way):
+ *   * A new client kicks any stale previous client - a PC that was killed
+ *     leaves a half-open socket whose readLine() would block forever and
+ *     silently starve every future connection.
+ *   * On every connect AND disconnect, and when the app unregisters, a
+ *     zero-button report is emitted so the host never gets stuck with a
+ *     physically-held mouse button.
  */
 class BridgeServer(
     private val portProvider: () -> Int,
@@ -26,6 +33,7 @@ class BridgeServer(
     private var serverSocket: ServerSocket? = null
     private var worker: Thread? = null
 
+    @Volatile private var client: Socket? = null
     @Volatile private var buttonMask = 0
 
     fun start() {
@@ -38,6 +46,9 @@ class BridgeServer(
         running = false
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
+        releaseAll()
+        try { client?.close() } catch (_: Exception) {}
+        client = null
     }
 
     private fun loop() {
@@ -48,32 +59,53 @@ class BridgeServer(
                 serverSocket = ss
                 onLog("Listening on 0.0.0.0:$port")
                 while (running) {
-                    val client = ss.accept()
-                    onClient(client.inetAddress?.hostAddress ?: "?")
-                    handleClient(client)
+                    val incoming = ss.accept()
+                    val old = client
+                    if (old != null && old !== incoming) {
+                        onLog("Kicking stale PC connection")
+                        try { old.close() } catch (_: Exception) {}
+                    }
+                    client = incoming
+                    buttonMask = 0
+                    releaseAll()
+                    onClient(incoming.inetAddress?.hostAddress ?: "?")
+                    thread(name = "bridge-client") { handleClient(incoming) }
                 }
             } catch (e: Exception) {
-                onLog("Server error: ${e.message}")
+                if (running) onLog("Server error: ${e.message}")
                 try { Thread.sleep(1000) } catch (_: InterruptedException) {}
             }
         }
     }
 
     private fun handleClient(socket: Socket) {
-        onLog("PC connected: ${socket.inetAddress?.hostAddress}")
         try {
             socket.tcpNoDelay = true
+            socket.soTimeout = 15000
             val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-            while (running) {
-                val line = reader.readLine() ?: break
+            while (running && client === socket) {
+                val line = try {
+                    reader.readLine()
+                } catch (e: SocketTimeoutException) {
+                    continue // keepalive window elapsed, keep waiting
+                } ?: break
                 applyCommand(line)
             }
         } catch (e: Exception) {
-            onLog("Client error: ${e.message}")
+            if (running && client === socket) onLog("Client error: ${e.message}")
         } finally {
             try { socket.close() } catch (_: Exception) {}
-            onLog("PC disconnected")
+            if (client === socket) {
+                client = null
+                releaseAll()
+                onLog("PC disconnected")
+            }
         }
+    }
+
+    /** Force the host to see "no buttons held" - cures stuck-click states. */
+    private fun releaseAll() {
+        try { hid.sendReport(0, 0, 0, 0) } catch (_: Exception) {}
     }
 
     private fun applyCommand(line: String) {
