@@ -105,22 +105,6 @@ class HidMouseController(
 
         override fun onSetProtocol(device: BluetoothDevice, protocol: Byte) {}
 
-        @SuppressLint("MissingPermission")
-        override fun onGetHidDescriptor(device: BluetoothDevice, bufferSize: Int) {
-            try {
-                hidDevice?.replyHidDescriptor(device, 0, MouseReport.hidDescriptor())
-            } catch (_: Exception) {
-            }
-        }
-
-        @SuppressLint("MissingPermission")
-        override fun onGetReportDescriptor(device: BluetoothDevice, bufferSize: Int) {
-            try {
-                hidDevice?.replyReportDescriptor(device, MouseReport.DESCRIPTOR)
-            } catch (_: Exception) {
-            }
-        }
-
         override fun onVirtualCableUnplug(device: BluetoothDevice) {
             if (hostDevice == device) hostDevice = null
             connected = false
