@@ -29,7 +29,7 @@ class AimParams:
     min_move: float = 1.0
     min_speed: float = 2.0        # counts/frame floor outside the deadzone
     comp_weight: float = 1.0      # fraction of in-flight move pre-subtracted from error
-    comp_frames: int = 6          # assumed in-flight window, in loop frames
+    comp_frames: int = 8          # in-flight window, loop frames
 
     deadzone: float = 11.0        # stop inside this radius (px)
     arrive_px: float = 0.0        # lock OFF the output inside this radius (0=off)
@@ -159,7 +159,7 @@ class AimEngine:
         # screenshot after the loop delay, so subtract everything still in
         # flight; otherwise the loop re-sends moves it already ordered.
         now = time.monotonic()
-        window = max(1, p.comp_frames) / 60.0
+        window = max(1, p.comp_frames or 8) / 60.0
         self._hist = [h for h in self._hist if now - h[0] <= window]
         w = max(0.0, min(1.0, p.comp_weight))
         infl_x = w * sum(h[1] for h in self._hist)

@@ -94,7 +94,7 @@ def simulate(p, seed, err0, move=0.0, switch_at=None, t_frames=360):
 
 
 BASE = dict(move_fraction=0.7, max_step=60, smoothing=0.55, counts_per_px=1.0 / CP,
-            deadzone=11.0, min_speed=0.0, comp_frames=6, comp_weight=1.0, arrive_px=0.0)
+            deadzone=11.0, min_speed=0.0, comp_frames=8, comp_weight=1.0, arrive_px=0.0)
 
 
 def P(**kw):

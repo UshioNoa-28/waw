@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--med-win", type=int, default=1, help="Median filter width on detection error (1=off)")
     p.add_argument("--humanize", action="store_true", help="Reaction gate + ramp-in + tremor (human-like onset)")
     p.add_argument("--aim-floor", type=float, default=2.0, help="Min counts per frame outside deadzone (0=off)")
-    p.add_argument("--aim-comp", type=int, default=6, help="In-flight compensation window, loop frames (0=off)")
+    p.add_argument("--aim-comp", type=int, default=8, help="In-flight compensation window, loop frames (0=off)")
     p.add_argument("--aim-cw", type=float, default=1.0, help="In-flight compensation weight 0..1")
     p.add_argument("--log-aim", action="store_true", help="Record per-frame error+commands to aim_trace.csv")
     p.add_argument("--no-aim", action="store_true", help="Record only: never move the mouse (captures human flicks in-game)")
