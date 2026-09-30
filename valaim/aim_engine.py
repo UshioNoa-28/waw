@@ -36,6 +36,10 @@ class AimParams:
     overshoot_frames: int = 0
 
     max_segment: int = 127
+    # Mouse counts emitted per screen pixel of error. Depends on the in-game
+    # sensitivity; 1.0 is a wrong default for most games, so the app
+    # auto-calibrates this at startup (see main.calibrate_gain).
+    counts_per_px: float = 1.0
 
 
 class AimEngine:
@@ -80,8 +84,12 @@ class AimEngine:
             gain *= p.overshoot_factor
             self._overshoot_left -= 1
 
-        step_x = ex * gain + self._carry_x
-        step_y = ey * gain + self._carry_y
+        # Pixel error -> mouse counts using the calibrated gain. Without this
+        # the loop emits counts assuming 1:1 and overshoots whenever one count
+        # turns more pixels on screen.
+        cp = max(0.05, p.counts_per_px)
+        step_x = ex * gain * cp + self._carry_x
+        step_y = ey * gain * cp + self._carry_y
 
         # Slew limit (also respects the HID report's +-127 range).
         limit = max(1, min(p.max_step, p.max_segment))

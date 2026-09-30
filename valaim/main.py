@@ -53,6 +53,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--smoothing", type=float, default=0.4,
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
     p.add_argument("--deadzone", type=float, default=2.0, help="Stop radius in pixels")
+    p.add_argument("--aim-gain", type=float, default=0.0,
+                   help="Mouse counts per screen pixel (0 = auto-calibrate at startup)")
+    p.add_argument("--no-calibrate", action="store_true", help="Skip startup gain calibration")
     p.add_argument("--key", default="none", help="Hold this key to aim (default: none = always on)")
     p.add_argument("--hold-button", default="none",
                    choices=["none", "left", "right", "middle", "x1", "x2"],
@@ -93,6 +96,8 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         head_offset_y=args.head_offset_y,
         smoothing=args.smoothing,
         deadzone=args.deadzone,
+        aim_gain=args.aim_gain,
+        calibrate=not args.no_calibrate,
         head_width=args.head_width,
         move_fraction=args.move_fraction,
         max_step=args.max_step,
@@ -200,6 +205,38 @@ def bt_test_loop(cfg: AimConfig) -> None:
         time.sleep(1.0 / step_hz)
 
 
+def calibrate_counts_per_px(capture: ScreenCapture, _status) -> float | None:
+    """Measure how many screen pixels one mouse count moves the view.
+
+    Sends one probe move, compares two frames by phase correlation, and
+    restores the view. Returns counts-per-pixel (what the engine needs).
+    """
+    import cv2
+    import numpy as np
+
+    probe = 64
+    _status("校准鼠标增益:发送一次试探移动...")
+    img1, *_ = capture.grab()
+    g1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    move_mouse(probe, 0)
+    time.sleep(0.18)
+    img2, *_ = capture.grab()
+    move_mouse(-probe, 0)
+    time.sleep(0.05)
+    g2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    try:
+        (shift_x, response), _ = cv2.phaseCorrelation(g1, g2)
+    except cv2.error:
+        return None
+    if response < 0.02:
+        return None
+    px = abs(shift_x)
+    if px < 2.0:
+        return None
+    return probe / px
+
+
 def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     import cv2
 
@@ -253,6 +290,22 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     if backend == "sendinput":
         print("[input] WARNING: SendInput is dropped while Vanguard-protected games are focused.")
 
+    cal_gain: float | None = None
+    if cfg.aim_gain > 0:
+        cal_gain = cfg.aim_gain
+        _status(f"瞄准增益(手动): {cal_gain:.2f} 计数/像素")
+    elif cfg.calibrate and backend == "bt":
+        try:
+            cal_gain = calibrate_counts_per_px(capture, _status)
+        except Exception:
+            cal_gain = None
+        if cal_gain:
+            print(f"Aim gain calibrated: {cal_gain:.2f} counts/px")
+            _status(f"校准完成:每像素 {cal_gain:.2f} 个鼠标计数")
+        else:
+            print("[calib] could not measure gain, defaulting to 1.0")
+            _status("增益校准失败(画面无纹理?),按 1.0 运行;可手动设置 aim-gain")
+
     if cfg.bt_test:
         bt_test_loop(cfg)
         return
@@ -283,6 +336,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.min_move = cfg.min_move
         engine.p.smoothing = cfg.smoothing
         engine.p.deadzone = cfg.deadzone
+        engine.p.counts_per_px = cfg.aim_gain if cfg.aim_gain > 0 else (cal_gain or 1.0)
         img, crop_x, crop_y, crop_w, crop_h = capture.grab()
         detections = detector.detect(img, crop_x, crop_y)
         cursor = capture.crosshair()
@@ -314,11 +368,11 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 action = "locked (already close)"
 
         if active:
-            status = selector.explain(detections, cursor)
+            status_text = selector.explain(detections, cursor)
             if action:
-                status = f"{status} | {action}"
+                status_text = f"{status_text} | {action}"
         elif cfg.hold_button:
-            status = f"idle | hold {cfg.hold_button} mouse to aim | detections={len(detections)}"
+            status_text = f"idle | hold {cfg.hold_button} mouse to aim | detections={len(detections)}"
         elif cfg.keybind:
             ks = key_state(cfg.keybind)
             if ks == -1:
@@ -327,16 +381,16 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 key_txt = f"unknown key '{cfg.keybind}'"
             else:
                 key_txt = f"{cfg.keybind} not pressed (state=0x{ks:04X})"
-            status = f"idle | {key_txt} | detections={len(detections)}"
+            status_text = f"idle | {key_txt} | detections={len(detections)}"
         else:
-            status = f"idle | detections={len(detections)}"
+            status_text = f"idle | detections={len(detections)}"
 
         now = time.monotonic()
-        if status != last_status or now - last_log_time >= 1.0:
-            write_log(log_file, status)
-            _status(status)
+        if status_text != last_status or now - last_log_time >= 1.0:
+            write_log(log_file, status_text)
+            _status(status_text)
             last_log_time = now
-            last_status = status
+            last_status = status_text
 
         want_click = bool(cfg.triggerbot and active and dist is not None and dist <= cfg.trigger_radius)
         if want_click != clicking:
@@ -345,7 +399,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
 
         if cfg.debug:
             frame = img.copy()
-            draw_debug(frame, detections, target, cursor, crop_x, crop_y, active, status)
+            draw_debug(frame, detections, target, cursor, crop_x, crop_y, active, status_text)
             cv2.imshow("valaim", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break

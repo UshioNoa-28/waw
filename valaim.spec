@@ -53,5 +53,5 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=False,  # windowed: the GUI is the main interface; use --cli for console
+    console=True,  # keep the console visible so errors are never silent
 )

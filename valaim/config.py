@@ -32,6 +32,8 @@ class AimConfig:
     smoothing: float = 0.4
     deadzone: float = 2.0
     head_offset_y: float = 0.0
+    aim_gain: float = 0.0
+    calibrate: bool = True
 
     keybind: str = ""
     hold_button: str = ""

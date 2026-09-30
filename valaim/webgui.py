@@ -78,7 +78,7 @@ NUMERIC = {
     "fov_radius": int, "conf_threshold": float, "iou_threshold": float,
     "head_bias": float, "head_offset_y": float,
     "move_fraction": float, "max_step": int, "smoothing": float,
-    "deadzone": float, "fps": int, "trigger_radius": int,
+    "deadzone": float, "fps": int, "trigger_radius": int, "aim_gain": float,
 }
 
 
@@ -229,6 +229,7 @@ button:disabled{opacity:.4;cursor:default}
 <div class="row"><label>每帧最大移动(像素)</label><input type=range id="max_step" min=2 max=127 step=1><span class=val id="max_step_v"></span></div>
 <div class="row"><label>平滑度(越小越稳)</label><input type=range id="smoothing" min=0.05 max=1 step=0.01><span class=val id="smoothing_v"></span></div>
 <div class="row"><label>死区(像素)</label><input type=range id="deadzone" min=0 max=10 step=0.5><span class=val id="deadzone_v"></span></div>
+<div class="row"><label>鼠标增益(计数/像素,0=自动校准)</label><input type=range id="aim_gain" min=0 max=3 step=0.05><span class=val id="aim_gain_v"></span></div>
 <div class="row"><label>帧率上限</label><input type=range id="fps" min=30 max=240 step=5><span class=val id="fps_v"></span></div>
 </div>
 
@@ -248,8 +249,8 @@ button:disabled{opacity:.4;cursor:default}
 <div id="status">加载中...</div>
 
 <script>
-const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","fps"];
-const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0};
+const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","fps"];
+const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0};
 function fill(s){
   // Never overwrite the field the user is typing into.
   const act=document.activeElement;
