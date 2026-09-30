@@ -467,7 +467,7 @@ def main() -> None:
     if args.calibrate_tool:
         from .calibrate import run_calibration
 
-        raise SystemExit(run_calibration(cfg, [16, 32, 64, 128, 256], reps=3, settle=0.25, countdown=args.calib_countdown))
+        raise SystemExit(run_calibration(cfg, [16, 32, 64, 96, 128], reps=3, settle=0.25, countdown=args.calib_countdown))
     run(cfg)
 
 

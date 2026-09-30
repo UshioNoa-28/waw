@@ -140,10 +140,15 @@ def run_calibration(cfg, sizes: list[int], reps: int, settle: float, countdown: 
             move_mouse(-size, 0)
             time.sleep(settle)
             res = measure_shift(img1, img2)
-            if res is None or res[1] < 0.02:
+            if res is None or res[1] < 0.05:
                 print(f"{size:>8} {'失败(响应太低/无纹理)':>24}")
                 continue
             shift = abs(res[0])
+            if shift < 2.0:
+                # No measurable movement: periodic wall patterns can fool the
+                # global correlation at large shifts; count as a failed sample.
+                print(f"{size:>8} {'失败(未检出移动/纹理重复)':>24}")
+                continue
             points.append((float(size), shift))
             per_size[size].append(shift)
             print(f"{size:>8} {shift:>10.1f} {shift / size:>10.3f}  {res[1]:.2f}")
