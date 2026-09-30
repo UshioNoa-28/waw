@@ -61,19 +61,6 @@ class MainActivity : AppCompatActivity() {
             if (running) stopAll() else requestThenStart()
         }
         findViewById<Button>(R.id.btnDiscover).setOnClickListener { makeDiscoverable() }
-        findViewById<Button>(R.id.btnReconnect).setOnClickListener {
-            val ok = hid.reconnect()
-            setStatus(if (ok) "Reconnecting to last PC..." else "No saved PC - pair \"BtAimBridge\" in Windows first")
-        }
-        findViewById<Button>(R.id.btnReset).setOnClickListener {
-            hid.resetAll()
-            running = false
-            btnToggle.text = "START"
-            try {
-                startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-            } catch (_: Exception) {
-            }
-        }
         findViewById<Button>(R.id.btnRefresh).setOnClickListener {
             tvIp.text = "PC IP: ${localIp()}"
         }

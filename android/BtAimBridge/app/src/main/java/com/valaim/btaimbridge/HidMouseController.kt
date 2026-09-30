@@ -81,17 +81,12 @@ class HidMouseController(
                 onState("HID registered")
                 // Registration is not connection: after the app was killed and
                 // restarted, the host link must be re-established actively.
-                startReconnectLoop()
+                if (!connected && !manualStop) startReconnectLoop()
             } else {
                 connected = false
                 hostDevice = null
                 onState("HID unregistered")
-                // Android sometimes unregisters the app on its own; re-register
-                // so the phone doesn't become pair-then-instantly-drop until a
-                // manual restart.
-                if (!manualStop) {
-                    Thread { maybeReregister() }.start()
-                }
+                // The watchdog re-registers within a few seconds.
             }
         }
 
@@ -158,41 +153,51 @@ class HidMouseController(
         }.start()
     }
 
-    /** Manual "reconnect" from the UI. */
+    /**
+     * Self-healing watchdog. Every few seconds: re-register if the app got
+     * unregistered, reconnect if the host link dropped. No user action ever.
+     */
+    @Volatile private var watchRunning = false
+
+    private fun startWatchdog() {
+        if (watchRunning) return
+        watchRunning = true
+        Thread {
+            while (watchRunning) {
+                try { Thread.sleep(4000) } catch (_: InterruptedException) { break }
+                if (!watchRunning || manualStop) break
+                if (!registered) {
+                    reregister()
+                    continue
+                }
+                if (!connected) {
+                    val hd = hidDevice
+                    val dev = resolveHost()
+                    if (dev != null && hd != null) {
+                        try { hd.connect(dev) } catch (_: Exception) {}
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun stopWatchdog() {
+        watchRunning = false
+    }
+
     @SuppressLint("MissingPermission")
-    fun reconnect(): Boolean {
-        val mac = prefs.getString(KEY_HOST_MAC, null) ?: return false
-        val hd = hidDevice ?: return false
-        val dev = try {
+    private fun resolveHost(): BluetoothDevice? {
+        val mac = prefs.getString(KEY_HOST_MAC, null) ?: return null
+        return try {
             adapter?.getRemoteDevice(mac)
         } catch (_: IllegalArgumentException) {
             null
-        } ?: return false
-        return try {
-            hd.connect(dev)
-        } catch (e: SecurityException) {
-            false
         }
     }
 
-    /**
-     * Full reset: stop everything, forget the saved host. Pairing keys live
-     * in the two OSes, not in this app - to truly start over, also remove
-     * "BtAimBridge" in Windows Bluetooth settings, then pair again fresh.
-     */
-    fun resetAll() {
-        unregister()
-        reconnecting = false
-        prefs.edit().remove(KEY_HOST_MAC).apply()
-        onState("Reset done - remove \"BtAimBridge\" in Windows, then re-pair")
-    }
-
     @SuppressLint("MissingPermission")
-    private fun maybeReregister() {
-        if (manualStop || registered) return
-        onState("Re-registering HID...")
-        try { Thread.sleep(800) } catch (_: InterruptedException) {}
-        if (manualStop || registered) return
+    private fun reregister() {
+        onState("Watchdog re-registering HID...")
         val dev = hidDevice ?: run { register(); return }
         val sdp = BluetoothHidDeviceAppSdpSettings(
             "BtAimBridge", "Bluetooth mouse bridge", "ValAim",
@@ -243,6 +248,7 @@ class HidMouseController(
     @SuppressLint("MissingPermission")
     fun register() {
         manualStop = false
+        startWatchdog()
         val a = adapter ?: run { onState("No Bluetooth"); return }
         if (!a.isEnabled) { onState("Turn Bluetooth ON"); return }
         if (!hasPermission()) { onState("Grant Nearby devices permission"); return }
@@ -254,6 +260,7 @@ class HidMouseController(
     @SuppressLint("MissingPermission")
     fun unregister() {
         manualStop = true
+        stopWatchdog()
         val dev = hidDevice
         try { dev?.unregisterApp() } catch (_: Exception) {}
         hidDevice = null
