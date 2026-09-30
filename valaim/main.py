@@ -80,6 +80,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--log-aim", action="store_true", help="Record per-frame error+commands to aim_trace.csv")
     p.add_argument("--no-aim", action="store_true", help="Record only: never move the mouse (captures human flicks in-game)")
     p.add_argument("--trace", default="aim_trace.csv", help="Trace csv path for --log-aim")
+    p.add_argument("--start-delay", type=float, default=3.0,
+                   help="Seconds before aiming/recording/calibration starts (time to switch to the game)")
     p.add_argument("--triggerbot", action="store_true")
     p.add_argument("--trigger-radius", type=int, default=80)
     p.add_argument("--fire-button", default="none",
@@ -149,6 +151,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         log_aim=args.log_aim,
         aim_off=args.no_aim,
         trace_path=args.trace,
+        start_delay=args.start_delay,
         arrive_px=args.arrive_px,
         resume_px=args.resume_px,
         med_win=args.med_win,
@@ -337,6 +340,13 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         print(f"[input] bt -> {cfg.bt_host}:{cfg.bt_port}")
     if backend == "sendinput":
         print("[input] WARNING: SendInput is dropped while Vanguard-protected games are focused.")
+
+    if cfg.start_delay and cfg.start_delay > 0:
+        print(f"starting in {cfg.start_delay:.0f}s - switch to the game now...")
+        _end = time.monotonic() + cfg.start_delay
+        while time.monotonic() < _end:
+            time.sleep(0.15)
+        print("GO")
 
     # Gain (mouse counts per screen pixel) resolution order:
     #   manual --aim-gain > offline calib file > --sens formula > --calibrate probe > 1.0

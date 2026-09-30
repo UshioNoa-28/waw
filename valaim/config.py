@@ -43,6 +43,7 @@ class AimConfig:
     log_aim: bool = False
     aim_off: bool = False
     trace_path: str = "aim_trace.csv"
+    start_delay: float = 3.0
     aim_comp: int = 6
     aim_cw: float = 1.0
     smoothing: float = 0.7
