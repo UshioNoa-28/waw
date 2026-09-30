@@ -268,7 +268,7 @@ button:disabled{opacity:.4;cursor:default}
 <div class="row"><label>最低速度(计数/帧)</label><input type=range id="aim_floor" min=0 max=6 step=0.5><span class=val id="aim_floor_v"></span></div>
 <div class="row"><label>每帧最大移动(计数)</label><input type=range id="max_step" min=2 max=127 step=1><span class=val id="max_step_v"></span></div>
 <div class="row"><label>平滑(越小越稳)</label><input type=range id="smoothing" min=0.05 max=1 step=0.01><span class=val id="smoothing_v"></span></div>
-<div class="row"><label>死区(像素)</label><input type=range id="deadzone" min=0 max=10 step=0.5><span class=val id="deadzone_v"></span></div>
+<div class="row"><label>死区(像素)</label><input type=range id="deadzone" min=0 max=20 step=0.5><span class=val id="deadzone_v"></span></div>
 <div class="row"><label>帧率上限</label><input type=range id="fps" min=30 max=240 step=5><span class=val id="fps_v"></span></div>
 </div>
 
