@@ -37,6 +37,16 @@ Get-PnpDevice -Class Bluetooth -PresentOnly | ForEach-Object {
 Write-Output '=== Restarting Bluetooth service ==='
 Restart-Service bthserv -Force
 Write-Output '  bthserv restarted'
+Write-Output '=== Cycling Bluetooth adapter (disable/enable) ==='
+$adapters = @(Get-PnpDevice -Class Bluetooth -PresentOnly | Where-Object { $_.Status -eq 'OK' -or $_.FriendlyName -match 'Intel|Realtek|MediaTek|Qualcomm|Wireless|Bluetooth|RT[0-9]|MT[0-9]' })
+foreach ($a in $adapters) {
+    if ($a.FriendlyName -match 'BtAimBridge') { continue }
+    Write-Output ('  cycling: ' + $a.FriendlyName)
+    Disable-PnpDevice -InstanceId $a.InstanceId -Confirm:$false | Out-Null
+    Start-Sleep -Seconds 3
+    Enable-PnpDevice -InstanceId $a.InstanceId -Confirm:$false | Out-Null
+}
+Write-Output '  adapter cycled'
 Write-Output 'DONE'
 """
 
