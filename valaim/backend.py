@@ -68,6 +68,9 @@ class OnnxDetector:
         self.iou_threshold = iou_threshold
         self.class_names = list(class_names or [])
         self.providers = self._providers(ort)
+        self._is_cpu = "CPUExecutionProvider" == (self.providers[0] if isinstance(self.providers[0], str) else self.providers[0][0])
+        self._gpu_fail = 0
+        self._cpu_since = 0.0
         self.session = self._create_session(ort)
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self._choose_output(ort)
@@ -118,7 +121,10 @@ class OnnxDetector:
         except Exception:
             if self.backend == "cpu":
                 raise
-            return ort.InferenceSession(self.model_path, providers=["CPUExecutionProvider"])
+            sess = ort.InferenceSession(self.model_path, providers=["CPUExecutionProvider"])
+            self._is_cpu = True
+            self._cpu_since = 0.0
+            return sess
 
     def _choose_output(self, ort) -> str:
         outputs = self.session.get_outputs()
@@ -221,26 +227,53 @@ class OnnxDetector:
             )
         return detections
 
-    def _fallback_to_cpu(self) -> bool:
-        """Rebuild the session on CPU after a runtime DirectML/CUDA failure."""
+    def _make_session(self, cpu_only: bool):
+        import time as _t
+
+        import onnxruntime as ort
+
+        providers = ["CPUExecutionProvider"] if cpu_only else self.providers
+        sess = ort.InferenceSession(self.model_path, providers=providers)
+        self._is_cpu = cpu_only
+        self._switched_at = _t.monotonic() if not cpu_only else self._switched_at
+        return sess
+
+    def _recover(self) -> bool:
+        """Called after a runtime inference failure. Try to get back on GPU."""
         import sys
+        import time as _t
 
-        if self.backend == "cpu":
-            return False
-        try:
-            import onnxruntime as ort
+        now = _t.monotonic()
 
-            if str(self.session.get_providers()[:1]) == "['CPUExecutionProvider']":
+        # 1) GPU session died -> rebuild the GPU session and retry
+        if not self._is_cpu:
+            self._gpu_fail = getattr(self, "_gpu_fail", 0) + 1
+            try:
+                self.session = self._make_session(cpu_only=False)
+                print(f"[inference] GPU hiccup #{self._gpu_fail}: session rebuilt", file=sys.stderr)
+                return True
+            except Exception:
+                pass
+            # 2) rebuild failed -> temporary CPU so aiming never stops
+            try:
+                self.session = self._make_session(cpu_only=True)
+                self._cpu_since = now
+                print("[inference] GPU unusable -> CPU fallback (will retry GPU every 30s)",
+                      file=sys.stderr)
+                return True
+            except Exception:
                 return False
-            self.session = ort.InferenceSession(
-                self.model_path, providers=["CPUExecutionProvider"]
-            )
-            self.backend = "cpu"
-            print("[inference] GPU provider failed at runtime -> switched to CPU",
-                  file=sys.stderr)
-            return True
-        except Exception:
-            return False
+
+        # 3) already on CPU -> after 30s try upgrading back to GPU
+        if now - getattr(self, "_cpu_since", 0.0) > 30.0:
+            try:
+                sess = self._make_session(cpu_only=False)
+                self.session = sess
+                print("[inference] back on GPU", file=sys.stderr)
+                return True
+            except Exception:
+                self._cpu_since = now  # wait another 30s
+        return False
 
     def detect(self, img: np.ndarray, offset_x: int = 0, offset_y: int = 0) -> list[Detection]:
         canvas, scale, pad_x, pad_y = _letterbox(img, self.imgsz)
@@ -249,7 +282,7 @@ class OnnxDetector:
         try:
             outputs = self.session.run([self.output_name], {self.input_name: blob})
         except Exception:
-            if not self._fallback_to_cpu():
+            if not self._recover():
                 raise
             outputs = self.session.run([self.output_name], {self.input_name: blob})
         return self._decode(outputs[0], scale, pad_x, pad_y, offset_x, offset_y)
