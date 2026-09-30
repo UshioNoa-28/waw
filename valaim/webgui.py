@@ -268,10 +268,11 @@ button:disabled{opacity:.4;cursor:default}
 </div>
 
 <div class="card"><h2>触发方式</h2>
-<div class="row"><label>始终开启(不用按键)</label><input type=checkbox id="always_on"><label style="flex:0 0 auto">或按住键</label><input type=text id="trigger" size=10></div>
-<div class="row"><label>开火键 x1/x2/middle/right</label><input type=text id="fire_button" size=10>
+<div class="row"><label>始终开启(不用按键)</label><input type=checkbox id="always_on"><label style="flex:0 0 auto">或按住键</label><input type=text id="trigger" size=10><button id="capKey" style="padding:6px 10px">采集</button></div>
+<div class="row"><label>开火键</label><input type=text id="fire_button" size=10><button id="capBtn" style="padding:6px 10px">采集</button>
 <label style="flex:0 0 auto">锁定半径px</label><input type=range id="fire_radius" min=4 max=60 step=2 style="flex:1"><span class=val id="fire_radius_v"></span></div>
 <div class="hint">开火键模式:按住侧键 → 自动吸附 → 锁定后手机替你按左键开火,松开即停。此时不要用物理左键射击。</div>
+<div class="row"><label>自动开火(需配合始终开启)</label><input type=checkbox id="triggerbot"></div>
 <div class="row"><label>显示画面预览(debug 窗口)</label><input type=checkbox id="debug"></div>
 </div>
 
@@ -287,19 +288,66 @@ button:disabled{opacity:.4;cursor:default}
 <script>
 const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_gain","aim_lead","fire_radius","fps"];
 const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,fps:0,head_offset_y:0};
+const KEYMAP={"Space":"SPACE","Tab":"TAB","Enter":"ENTER","Escape":"ESC","Minus":"-","Equal":"=","Comma":",","Period":".","Slash":"/","Semicolon":";","Quote":"\'","Backquote":"`","Backslash":"\\","BracketLeft":"[","BracketRight":"]"};
+function codeToName(code){
+  let m;
+  if(/^Key([A-Z])$/.test(code)) return RegExp.$1;
+  if(/^Digit([0-9])$/.test(code)) return RegExp.$1;
+  if(/^F([1-9]|1[0-6])$/.test(code)) return code;
+  if(code==="ShiftLeft")return"LSHIFT"; if(code==="ShiftRight")return"RSHIFT";
+  if(code==="ControlLeft")return"LCTRL"; if(code==="ControlRight")return"RCTRL";
+  if(code==="AltLeft")return"ALT"; if(code==="AltRight")return"RALT";
+  return KEYMAP[code]||null;
+}
+let captureMode=null;
+function startCapture(which){
+  captureMode=which;
+  document.getElementById("status").textContent=which==="key"?"采集:请按下要绑定的键盘键...":"采集:请按一下要绑定的鼠标键...";
+}
+document.getElementById("capKey").onclick=()=>startCapture("key");
+document.getElementById("capBtn").onclick=()=>startCapture("btn");
+window.addEventListener("contextmenu",e=>{if(captureMode)e.preventDefault();});
+window.addEventListener("keydown",e=>{
+  if(!captureMode)return;
+  e.preventDefault();
+  if(e.code==="Escape"){captureMode=null;document.getElementById("status").textContent="已取消采集";return;}
+  if(captureMode!=="key")return;
+  const n=codeToName(e.code);
+  if(!n)return;
+  captureMode=null;
+  const el=document.getElementById("trigger"); el.value=n;
+  document.getElementById("always_on").checked=false;
+  send({trigger:n});
+  document.getElementById("status").textContent="已绑定按键: "+n;
+},true);
+window.addEventListener("mousedown",e=>{
+  if(!captureMode)return;
+  e.preventDefault();
+  if(captureMode!=="btn")return;
+  const names={0:"left",1:"middle",2:"right",3:"x1",4:"x2"};
+  const n=names[e.button]; if(!n)return;
+  if(n==="left"){document.getElementById("status").textContent="左键不能作为开火键(它就是被虚拟按的那个)";return;}
+  captureMode=null;
+  const el=document.getElementById("fire_button"); el.value=n;
+  document.getElementById("always_on").checked=false;
+  send({fire_button:n});
+  document.getElementById("status").textContent="已绑定开火键: "+n;
+},true);
 function fill(s){
   const act=document.activeElement;
   for(const id of ["bt_host","bt_port","classes","trigger","fire_button"]){
     const el=document.getElementById(id);
-    if(el!==act){
+    if(el&&el!==act){
       const want=id==="classes"?(s.target_classes||""):String(s[id]??(id==="bt_port"?47800:""));
       if(el.value!==want) el.value=want;
     }
   }
-  const sv=document.getElementById("sens"); if(sv!==act) sv.value=s.sens>0?s.sens:"";
-  const a=document.getElementById("always_on"); if(a!==act) a.checked=!s.keybind&&!s.hold_button&&!s.fire_button;
-  const tb=document.getElementById("triggerbot"); if(tb!==act) tb.checked=!!s.triggerbot;
-  const dg=document.getElementById("debug"); if(dg!==act) dg.checked=!!s.debug;
+  const sv=document.getElementById("sens"); if(sv&&sv!==act) sv.value=s.sens>0?s.sens:"";
+  const a=document.getElementById("always_on"); if(a&&a!==act) a.checked=!s.keybind&&!s.hold_button&&!s.fire_button;
+  const tk=document.getElementById("trigger"); if(tk&&tk!==act) tk.value=s.keybind||"";
+  const fb=document.getElementById("fire_button"); if(fb&&fb!==act) fb.value=s.fire_button||"";
+  const tb=document.getElementById("triggerbot"); if(tb&&tb!==act) tb.checked=!!s.triggerbot;
+  const dg=document.getElementById("debug"); if(dg&&dg!==act) dg.checked=!!s.debug;
   for(const k of NUM){
     const el=document.getElementById(k);
     if(el!==act) el.value=s[k];
