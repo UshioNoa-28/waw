@@ -251,6 +251,16 @@ _MOUSE_VK = {
 }
 
 
+def bt_lock_events() -> int:
+    """Number of lock-toggle presses received from the phone app."""
+    if _BT is not None:
+        try:
+            return _BT.pop_lock_flips()
+        except Exception:
+            return 0
+    return 0
+
+
 def mouse_button_down(button: str) -> bool:
     """True while the given physical mouse button is held (read-only).
 

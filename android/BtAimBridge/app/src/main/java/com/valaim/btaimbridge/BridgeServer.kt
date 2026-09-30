@@ -142,6 +142,16 @@ class BridgeServer(
     }
 
     /** Force the host to see "no buttons held" - cures stuck-click states. */
+    /** Ask the PC to toggle its aim-lock (button in MainActivity). */
+    fun sendLockToggle() {
+        val c = client ?: return
+        try {
+            c.getOutputStream().write("L\n".toByteArray())
+        } catch (e: Exception) {
+            onLog("sendLock failed: ${e.message}")
+        }
+    }
+
     private fun releaseAll() {
         try { hid.sendReport(0, 0, 0, 0) } catch (_: Exception) {}
     }

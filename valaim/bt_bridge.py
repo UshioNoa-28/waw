@@ -68,6 +68,7 @@ class BtBridge:
         self._buttons = 0
         self._sent_buttons = 0
         self._dirty = False
+        self._flips = 0
 
         self._thread = threading.Thread(target=self._run, name="bt-bridge", daemon=True)
         self._thread.start()
@@ -85,6 +86,8 @@ class BtBridge:
                 # fresh session: make sure buttons match on the next flush
                 self._sent_buttons = -1
                 self._dirty = True
+            threading.Thread(target=self._read_loop, args=(sock,),
+                             name="bt-bridge-rx", daemon=True).start()
             return True
         except OSError as exc:
             self._last_error = str(exc)
@@ -118,6 +121,28 @@ class BtBridge:
                     was = False
                     print(f"[bt] link dropped: {exc}; retrying")
             time.sleep(0)
+
+    def _read_loop(self, sock: socket.socket) -> None:
+        """Inbound lines from the phone (L = lock toggle press)."""
+        buf = b""
+        try:
+            while self._running and self._sock is sock:
+                data = sock.recv(256)
+                if not data:
+                    return
+                buf += data
+                while b"\n" in buf:
+                    line, _, buf = buf.partition(b"\n")
+                    if line.strip() == b"L":
+                        with self._lock:
+                            self._flips += 1
+        except OSError:
+            pass
+
+    def pop_lock_flips(self) -> int:
+        with self._lock:
+            n, self._flips = self._flips, 0
+        return n
 
     def _pump(self) -> None:
         last_tx = time.monotonic()

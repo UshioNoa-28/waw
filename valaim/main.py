@@ -14,6 +14,7 @@ from .config import AimConfig
 from .input_ctrl import (
     foreground_process,
     mouse_button_down,
+    bt_lock_events,
     active_backend,
     close_backend,
     key_state,
@@ -430,6 +431,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     shooting = False
     frames = 0
     vel: dict = {}
+    lock_on = True  # phone [锁定] button toggles (Vanguard hides all local keys in game)
     trace = None
     trace_f = None
     if cfg.log_aim:
@@ -491,6 +493,12 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             if not in_game:
                 gate_note = f"游戏未在前台(当前:{fpname or '未知'})"
         active = active and in_game
+        flips = bt_lock_events()
+        if flips:
+            lock_on = not lock_on if flips % 2 else lock_on
+        if not lock_on:
+            active = False
+            gate_note = "锁定OFF - 手机按[锁定]恢复"
         target = selector.select(detections, cursor) if active else None
         dist = None
         action = ""

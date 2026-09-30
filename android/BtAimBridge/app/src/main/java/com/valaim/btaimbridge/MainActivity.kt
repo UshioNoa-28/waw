@@ -68,6 +68,10 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "无法打开蓝牙设置", Toast.LENGTH_SHORT).show()
             }
         }
+        findViewById<Button>(R.id.btnLock).setOnClickListener {
+            server?.sendLockToggle()
+            Toast.makeText(this, "已发送锁定切换", Toast.LENGTH_SHORT).show()
+        }
         findViewById<Button>(R.id.btnResetHid).setOnClickListener {
             hid.forceReRegister()
             setStatus("Resetting HID registration...")
