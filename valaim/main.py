@@ -483,6 +483,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     lock_on = True
     tick = 0
     det_cache = None
+    grab_ms = infer_ms = 0.0
     _dump_t = 0.0
     _dump_next = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
     trace = None
@@ -548,8 +549,13 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             if cfg.latch_throttle and engine.is_latched and det_cache is not None and (tick % 2 == 0):
                 img, crop_x, crop_y, crop_w, crop_h, detections = det_cache
             else:
+                _tg = time.perf_counter()
                 img, crop_x, crop_y, crop_w, crop_h = capture.grab()
+                _ti = time.perf_counter()
                 detections = detector.detect(img, crop_x, crop_y)
+                _te = time.perf_counter()
+                grab_ms = (_ti - _tg) * 1000.0
+                infer_ms = (_te - _ti) * 1000.0
                 det_cache = (img, crop_x, crop_y, crop_w, crop_h, detections)
             tick += 1
             cursor = capture.crosshair()
@@ -629,6 +635,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 if trace is not None:
                     tt = round(time.monotonic() - t0, 4)
                     trace.writerow(["err", tt, round(dx, 2), round(dy, 2)])
+                    if grab_ms or infer_ms:
+                        trace.writerow(["timing", tt, round(grab_ms, 1), round(infer_ms, 1)])
                     dbg = getattr(engine, "_dbg", None)
                     if dbg:
                         trace.writerow(["dbg", tt, round(dbg[0], 1), round(dbg[2], 1),
