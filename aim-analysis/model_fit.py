@@ -133,7 +133,7 @@ def fit_ping(path):
 
 def main():
     out = {}
-    delays, ratios = fit_step("step.csv")
+    delays, ratios = fit_step("traces/step.csv")
     if delays:
         ds = sorted(delays)
         out["actuation"] = {
@@ -145,12 +145,12 @@ def main():
             "delay_hist": [round(x, 3) for x in ds],
         }
         out["gain_check_ratio_p50"] = round(st.median(ratios), 3)
-    out["noise"] = fit_noise("noise.csv")
-    out["target"] = fit_move("move.csv")
-    out["wifi"] = fit_ping("ping.log")
+    out["noise"] = fit_noise("traces/noise.csv")
+    out["target"] = fit_move("traces/move.csv")
+    out["wifi"] = fit_ping("traces/ping.log")
     out["loop_fps"] = 30
     out["cp_px_per_count"] = CP
-    with open("device_model.json", "w") as f:
+    with open("traces/device_model.json", "w") as f:
         json.dump(out, f, indent=1)
     print(json.dumps({k: v for k, v in out.items() if k != "actuation"}, indent=1, ensure_ascii=False))
     if "actuation" in out:

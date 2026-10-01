@@ -5,6 +5,9 @@ uv.lock
 models/
 *.tar.gz
 build.log
+*.log
+traces/
+*.tar.gz.tmp
 dist/
 build/
 kernel/vhidmouse/build/

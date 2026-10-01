@@ -19,7 +19,7 @@ from valaim.aim_engine import AimEngine, AimParams  # noqa: E402
 _CLOCK = {"t": 0.0}
 _AE.time = types.SimpleNamespace(monotonic=lambda: _CLOCK["t"])
 
-CFG = json.load(open("device_model.json"))
+CFG = json.load(open("traces/device_model.json"))
 DT = 1.0 / CFG.get("loop_fps", 30)
 CP = CFG["cp_px_per_count"]
 DELAYS = CFG["actuation"]["delay_hist"]
