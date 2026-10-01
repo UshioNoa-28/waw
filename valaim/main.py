@@ -61,7 +61,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-burst", dest="burst", action="store_false", help="Disable one-stroke burst mode (revert to per-frame loop)")
     p.add_argument("--burst-cooldown", type=float, default=0.28, help="Silence after a burst stroke (s)")
     p.add_argument("--burst-gain", type=float, default=1.0, help="Fraction of error per stroke")
-    p.add_argument("--burst-min-px", type=float, default=70.0, help="Smallest error that triggers a stroke (px)")
+    p.add_argument("--burst-min-px", type=float, default=0.0, help="(legacy) smallest error that triggers a stroke")
+    p.add_argument("--settle-ms", type=float, default=90.0, help="Wait after a lock before firing (hand-landing gate)")
+    p.add_argument("--settle-px", type=float, default=45.0, help="Max per-frame error change to count as settled")
     p.add_argument("--aim-gain", type=float, default=0.0,
                    help="Mouse counts per screen pixel (0 = auto from calib file / --sens)")
     p.add_argument("--sens", type=float, default=0.0,
@@ -139,6 +141,8 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         burst_cooldown=args.burst_cooldown,
         burst_gain=args.burst_gain,
         burst_min_px=args.burst_min_px,
+        settle_ms=args.settle_ms,
+        settle_px=args.settle_px,
         aim_gain=args.aim_gain,
         calibrate=args.calibrate,
         sens=args.sens,
@@ -362,6 +366,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             burst_cooldown=cfg.burst_cooldown,
             burst_gain=cfg.burst_gain,
             burst_min_px=cfg.burst_min_px,
+            settle_ms=cfg.settle_ms,
+            settle_px=cfg.settle_px,
             arrive_px=cfg.arrive_px,
             resume_px=cfg.resume_px,
             med_win=max(1, cfg.med_win),

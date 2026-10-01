@@ -37,7 +37,9 @@ class AimParams:
     burst: bool = False           # one full stroke per observation, then silence
     burst_cooldown: float = 0.15  # s of enforced silence after a burst (>actuation lag)
     burst_gain: float = 1.0       # fraction of error covered by the single stroke
-    burst_min_px: float = 0.0     # ignore strokes below this error (skip re-lock churn flicks)
+    burst_min_px: float = 0.0     # (legacy) ignore strokes below this error
+    settle_ms: float = 90.0       # hold fire until the lock has been stable this long
+    settle_px: float = 45.0       # ...and error moved less than this per frame (hand landed)
     burst_early: bool = True      # fire the next stroke as soon as the last one is SEEN to land (instead of waiting the full cooldown)
     arrive_px: float = 8.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 32.0       # ...and only resume past this (above spike band)
@@ -79,6 +81,7 @@ class AimEngine:
         self._raw: list = []          # recent raw errors for median filter
         self._latched = False         # arrived: output suppressed
         self._burst_t = -9e9
+        self._last_obs: tuple | None = None
         self._bexp = 0.0      # expected px drop of the in-flight stroke
         self._bref = None     # observation at fire time (for landing detection)
         self._bpx = None   # previous raw observation (spike clamp ref)
@@ -203,7 +206,17 @@ class AimEngine:
                 landed = True          # previous stroke visibly arrived
 
             distb = math.hypot(self._sx, self._sy)
+            # Stability gate: a mid-flick re-lock (crosshair sweeping past an
+            # enemy) churns within a couple frames; a real acquire settles.
+            # Fire only once the error has been quiet AND the lock is old enough.
+            obs_moved = 0.0
+            if self._last_obs is not None:
+                obs_moved = math.hypot(dx - self._last_obs[0], dy - self._last_obs[1])
+            self._last_obs = (dx, dy)
+            settled = (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < p.settle_px) if self._lock_at else True
             if landed or distb > dz:
+                if not landed and not settled:
+                    return 0, 0
                 if p.burst_min_px and distb < p.burst_min_px:
                     return 0, 0
             sx = sy = 0.0
