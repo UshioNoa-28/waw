@@ -1,4 +1,4 @@
-# VALORANT 蒸馏 round2.2
+# VALORANT 蒸馏 round2.3
 # ============================================================
 # ## VALORANT 蒸馏: yolo11m 教师 → yolo11n 学生
 # 前置: Kaggle 右侧 Accelerator 选 **GPU T4 x2**, Settings 里 **Internet 打开**。
@@ -100,20 +100,21 @@ random.seed(7); random.shuffle(keep)
 n_val = max(30, len(keep)//8)
 split = {'train': keep[n_val:], 'val': keep[:n_val]}
 for sp, lst in split.items():
-    d = WORK/sp; d.mkdir(exist_ok=True)
+    d = WORK/sp
+    (d/'images').mkdir(parents=True, exist_ok=True)
+    (d/'labels').mkdir(parents=True, exist_ok=True)
     for p in lst:
-        if not (d/p.name).exists(): shutil.copy(p, d/p.name)
-        ld = WORK/f'{sp}labels'; ld.mkdir(exist_ok=True)
-        shutil.copy(LAB/(p.stem+'.txt'), ld/p.with_suffix('.txt').name)
-    open(d/'dirs.txt','w').write('')  # marker
+        if not (d/'images'/p.name).exists(): shutil.copy(p, d/'images'/p.name)
+        shutil.copy(LAB/(p.stem+'.txt'), (d/'labels')/(p.stem+'.txt'))
 YAML = '/kaggle/working/valorant.yaml'
-open(YAML,'w').write(f'''path: {WORK}
-train: train
-val: val
+open(YAML,'w').write(f"""path: {WORK}
+train: train/images
+val: val/images
 nc: 2
 names: [Body, Head]
-''')
+""")
 print('train', len(split['train']), 'val', len(split['val']))
+
 
 # ============================================================
 # ## 训练 yolo11n(60 epoch, imgsz 512;双 T4 约 1~2h;显存不够就 batch=16)
