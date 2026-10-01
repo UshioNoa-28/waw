@@ -31,7 +31,7 @@ PORT = 8765
 # that to avoid quitting while the user is alt-tabbed into the game.
 IDLE_TIMEOUT_S = 150.0
 
-_session = {"opened": False, "last_seen": 0.0, "bye": False}
+_session = {"opened": False, "last_seen": 0.0, "bye": False, "armed": False, "born": time.time()}
 
 
 def _config_path() -> str:
@@ -341,6 +341,7 @@ document.getElementById("save").onclick=async()=>{
 };
 document.getElementById("quit").onclick=async()=>{
   document.getElementById("status").textContent="已退出,可关闭本页面。";
+  await fetch("/set",{"method":"POST","headers":{"Content-Type":"application/json"},"body":JSON.stringify({quit:true})});
   await postp("/bye");
 };
 // Closing this tab/browser tells the exe to quit (beacon survives page unload).
@@ -381,12 +382,21 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             patch = {}
         if self.path == "/set":
+            _session["armed"] = True
+            if patch.get("quit"):
+                _session["bye"] = True
             err = PANEL.apply(patch)
             self._send(400 if err else 200, (err or "ok").encode(), "text/plain")
         elif self.path == "/bye":
-            _session["bye"] = True
+            # Only honor goodbye from a session the user actually touched;
+            # a resurrected browser tab (Edge startup restore) closes with a
+            # beacon and would otherwise kill the panel mid-launch. Also
+            # ignored during the first 3s of life.
+            if _session["armed"] and time.time() - _session["born"] > 3.0:
+                _session["bye"] = True
             self._send(200, b"bye", "text/plain")
         elif self.path == "/start":
+            _session["armed"] = True
             self._send(200, PANEL.start().encode(), "text/plain")
         elif self.path == "/stop":
             self._send(200, PANEL.stop().encode(), "text/plain")
