@@ -10,6 +10,7 @@ class AimConfig:
     imgsz: int = 320
 
     capture_mode: str = "center"
+    capture_backend: str = "auto"   # auto|dxcam|dxcam-old|mss
     capture_anchor: str = "crosshair"
     crop_size: int = 640
     monitor: int = 0

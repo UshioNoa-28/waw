@@ -85,7 +85,7 @@ if /i "%BACKEND%"=="amd" set "ORT_PKG=onnxruntime-directml"
 if /i "%BACKEND%"=="cuda" set "ORT_PKG=onnxruntime-gpu"
 echo Backend: %BACKEND%  (^> %ORT_PKG%)
 "%PYEXE%" -m pip uninstall -y onnxruntime onnxruntime-directml onnxruntime-gpu >nul 2>&1
-"%PYEXE%" -m pip install numpy opencv-python mss %ORT_PKG% pyinstaller
+"%PYEXE%" -m pip install numpy opencv-python mss dxcam comtypes %ORT_PKG% pyinstaller
 if errorlevel 1 goto :error_deps
 echo.
 

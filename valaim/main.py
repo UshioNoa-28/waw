@@ -35,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--device-id", type=int, default=0)
     p.add_argument("--imgsz", type=int, default=640)
     p.add_argument("--capture", default="center", choices=["center", "full"])
+    p.add_argument("--capture-backend", default="auto", choices=["auto", "dxcam", "mss"])
     p.add_argument("--capture-anchor", default="crosshair", choices=["crosshair", "cursor"])
     p.add_argument("--crop", type=int, default=640)
     p.add_argument("--monitor", type=int, default=0)
@@ -123,6 +124,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         device_id=args.device_id,
         imgsz=args.imgsz,
         capture_mode=args.capture,
+        capture_backend=args.capture_backend,
         capture_anchor=args.capture_anchor,
         crop_size=args.crop,
         monitor=args.monitor,
@@ -358,23 +360,13 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         iou_threshold=cfg.iou_threshold,
         class_names=names,
     )
-    capture = ScreenCapture(
-        monitor=cfg.monitor,
-        mode=cfg.capture_mode,
-        crop_size=cfg.crop_size,
-        anchor=cfg.capture_anchor,
-    )
+    capture = _new_capture(cfg)
     perceptor = None
     if cfg.async_pipeline:
         from .perceptor import Perceptor
 
         def _cap_factory():
-            return ScreenCapture(
-                monitor=cfg.monitor,
-                mode=cfg.capture_mode,
-                crop_size=cfg.crop_size,
-                anchor=cfg.capture_anchor,
-            )
+            return _new_capture(cfg)
 
         _pr = Perceptor(_cap_factory, detector)
         if _pr.start():

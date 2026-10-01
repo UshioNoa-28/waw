@@ -16,7 +16,7 @@ datas = []
 binaries = []
 hiddenimports = []
 
-for pkg in ("onnxruntime", "cv2", "mss", "numpy"):
+for pkg in ("onnxruntime", "cv2", "mss", "numpy", "dxcam", "comtypes"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
