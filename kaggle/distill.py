@@ -1,44 +1,56 @@
-# VALORANT 蒸馏 round2(粘贴即跑)
+# VALORANT 蒸馏 round2.1(粘贴即跑)
 # ============================================================
 # ## VALORANT 蒸馏: yolo11m 教师 → yolo11n 学生
 # 前置: Kaggle 右侧 Accelerator 选 **GPU T4 x2**, Settings 里 **Internet 打开**。
 # 数据来源(都可选,缺哪个自动跳): ①你上传的 frames 数据集(名字含 `frames`) ②HF 公开 haqi001 head/body 3.2k 张
 
-!pip install -q ultralytics huggingface_hub 2>&1 | tail -1
 import os, glob, random, shutil
 from pathlib import Path
 
 WORK = Path('/kaggle/working/ds'); WORK.mkdir(parents=True, exist_ok=True)
 IMGS = WORK/'images'; IMGS.mkdir(exist_ok=True)
 
-# 1a) 用户自录 frames (kaggle dataset, 路径名含 frames)
-cand = [p for p in glob.glob('/kaggle/input/**/*', recursive=True) if os.path.isdir(p) and 'frame' in p.lower()]
-n_user = 0
-for d in cand:
-    for f in glob.glob(d + '/**/*.jpg', recursive=True) + glob.glob(d + '/**/*.png', recursive=True):
-        shutil.copy(f, IMGS / f'U{len(list(IMGS.glob("*"))):06d}.jpg'); n_user += 1
-print('user frames:', n_user)
+# 收集 /kaggle/input 下所有数据集里的图片 (Kaggle 挂载路径可能是
+# /kaggle/input/<slug>/... 或 /kaggle/input/datasets/<user>/<slug>/...)
+# 只要路径任意一段含 frame/replay/shot 就算训练素材; 按真实路径去重,
+# 父目录子目录双重复也安全。
+seen_real = set(); n_img = 0
+for root, dirs, files in os.walk('/kaggle/input'):
+    if not any(k in root.lower() for k in ("frame", "replay", "shot")):
+        continue
+    for fn in files:
+        if not fn.lower().endswith((".jpg", ".jpeg", ".png")):
+            continue
+        p = os.path.join(root, fn)
+        try:
+            rp = os.path.realpath(p)
+        except OSError:
+            rp = p
+        if rp in seen_real:
+            continue
+        seen_real.add(rp)
+        dst = IMGS / f'X{n_img:06d}.jpg'
+        try:
+            os.link(p, dst)          # 硬链接, 省拷贝省空间; 失败再 copy
+        except OSError:
+            shutil.copy(p, dst)
+        n_img += 1
+print('collected images:', n_img)
 
-# 1a2) 回放抽帧数据集 (名字含 replay)
-n_rep = 0
-for d in [p for p in glob.glob('/kaggle/input/**/*', recursive=True) if os.path.isdir(p) and ('replay' in p.lower() or 'frames' in p.lower())]:
-    for f in glob.glob(d + '/**/*.jpg', recursive=True) + glob.glob(d + '/**/*.png', recursive=True):
-        shutil.copy(f, IMGS / f'R{len(list(IMGS.glob("*"))):06d}.jpg'); n_rep += 1
-print('replay frames:', n_rep)
-
-# 1b) 公开数据集 haqi001 (自带标签, 类序需为 Body/Head; 若无标签当图用教师重标)
+# 公开数据集 haqi001 单独拉 (路径不含关键词)
 try:
     from huggingface_hub import snapshot_download
-    root = snapshot_download(repo_id='haqi001/VALORANT_destection_head_body_yolo', repo_type='dataset', allow_patterns=['images/*','train/*','*/images/*'])
+    root = snapshot_download(repo_id='haqi001/VALORANT_destection_head_body_yolo', repo_type='dataset', allow_patterns=['images/*','train/*','*/images/*','data/*'])
     n_pub = 0
     for f in glob.glob(root + '/**/*.jpg', recursive=True) + glob.glob(root + '/**/*.png', recursive=True):
-        if n_pub < 3000:
-            shutil.copy(f, IMGS / f'P{len(list(IMGS.glob("*"))):06d}.jpg'); n_pub += 1
+        if n_pub < 3200:
+            shutil.copy(f, IMGS / f'P{n_pub:06d}.jpg'); n_pub += 1
     print('public imgs:', n_pub)
 except Exception as e:
     print('public dataset skipped:', e)
 print('total images:', len(list(IMGS.iterdir())))
-assert len(list(IMGS.iterdir())) >= 300, '图片太少, 先上传 frames 数据集再跑'
+assert len(list(IMGS.iterdir())) >= 300, '图片太少'
+
 
 # ============================================================
 # ## 教师自动标注(yolo11m@640, conf≥0.45;公开集自带标签的图也统一用教师重标,保证标注风格一致)
