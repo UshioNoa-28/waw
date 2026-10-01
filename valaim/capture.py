@@ -14,6 +14,7 @@ class DxcamCapture:
         self._base = base
         self._cam = None
         self._dead = False
+        self._last = None
         self._open()
 
     def _open(self) -> None:
@@ -53,14 +54,22 @@ class DxcamCapture:
             if (x, y, w, h) != self._key:
                 self._cam.release()
                 self._open()
-            frame = self._cam.grab()
-            tries = 0
-            while frame is None and tries < 10:
-                frame = self._cam.grab()
-                tries += 1
+            frame = None
+            getter = getattr(self._cam, "get_frame", None)
+            if getter is not None:
+                try:
+                    frame = getter(blocking=True, timeout=0.1)
+                except TypeError:
+                    frame = getter()
             if frame is None:
-                raise TimeoutError("no frame")
-            return frame[:, :, :3], x, y, w, h
+                frame = self._cam.grab()
+            if frame is not None:
+                self._last = frame[:, :, :3]
+            # static desktop == no new presents; the previous frame IS the
+            # current truth - reuse instead of dying
+            if self._last is None:
+                raise TimeoutError("duplication has not produced a frame yet")
+            return self._last.copy(), x, y, w, h
         except Exception as exc:
             # exclusive-fullscreen games kill duplication; never let the aim
             # loop die over a capture optimization -> permanent mss downgrade
