@@ -1,4 +1,4 @@
-# VALORANT 蒸馏一体脚本(粘贴即跑)
+# VALORANT 蒸馏 round2(粘贴即跑)
 # ============================================================
 # ## VALORANT 蒸馏: yolo11m 教师 → yolo11n 学生
 # 前置: Kaggle 右侧 Accelerator 选 **GPU T4 x2**, Settings 里 **Internet 打开**。
@@ -21,7 +21,7 @@ print('user frames:', n_user)
 
 # 1a2) 回放抽帧数据集 (名字含 replay)
 n_rep = 0
-for d in [p for p in glob.glob('/kaggle/input/**/*', recursive=True) if os.path.isdir(p) and 'replay' in p.lower()]:
+for d in [p for p in glob.glob('/kaggle/input/**/*', recursive=True) if os.path.isdir(p) and ('replay' in p.lower() or 'frames' in p.lower())]:
     for f in glob.glob(d + '/**/*.jpg', recursive=True) + glob.glob(d + '/**/*.png', recursive=True):
         shutil.copy(f, IMGS / f'R{len(list(IMGS.glob("*"))):06d}.jpg'); n_rep += 1
 print('replay frames:', n_rep)
@@ -64,11 +64,10 @@ print('teacher classes:', t.names)
 
 LAB = WORK/'labels'; LAB.mkdir(exist_ok=True)
 files = sorted(IMGS.glob('*'))
-files = [p for p in files if not (LAB/(p.stem+'.txt')).exists()]   # 缓存: 已标注不重跑
 BATCH = 8
 for i in range(0, len(files), BATCH):
     b = files[i:i+BATCH]
-    res = t.predict([str(p) for p in b], imgsz=640, conf=0.45, iou=0.5, device=0, verbose=False)
+    res = t.predict([str(p) for p in b], imgsz=640, conf=0.35, iou=0.5, device=0, verbose=False)
     if i % 200 == 0: print(f"label {i}/{len(files)}", flush=True)
     for p, r in zip(b, res):
         lines = []
@@ -89,16 +88,16 @@ random.seed(7); random.shuffle(keep)
 n_val = max(30, len(keep)//8)
 split = {'train': keep[n_val:], 'val': keep[:n_val]}
 for sp, lst in split.items():
-    d = WORK/sp
-    (d/'images').mkdir(parents=True, exist_ok=True)
-    (d/'labels').mkdir(parents=True, exist_ok=True)
+    d = WORK/sp; d.mkdir(exist_ok=True)
     for p in lst:
-        if not (d/'images'/p.name).exists(): shutil.copy(p, d/'images'/p.name)
-        shutil.copy(LAB/(p.stem+'.txt'), (d/'labels')/(p.stem+'.txt'))
+        if not (d/p.name).exists(): shutil.copy(p, d/p.name)
+        ld = WORK/f'{sp}labels'; ld.mkdir(exist_ok=True)
+        shutil.copy(LAB/(p.stem+'.txt'), ld/p.with_suffix('.txt').name)
+    open(d/'dirs.txt','w').write('')  # marker
 YAML = '/kaggle/working/valorant.yaml'
 open(YAML,'w').write(f'''path: {WORK}
-train: train/images
-val: val/images
+train: train
+val: val
 nc: 2
 names: [Body, Head]
 ''')
@@ -120,8 +119,8 @@ m = YOLO(best)
 onnx_p = m.export(format='onnx', imgsz=512, opset=12, dynamic=True, simplify=True)
 import shutil, subprocess
 out = Path('/kaggle/working/val_student'); (out/'models/student').mkdir(parents=True, exist_ok=True)
-shutil.copy(onnx_p, out/'models/student/model.onnx')
-(out/'models/student/model.json').write_text('{"names": {"0": "Body", "1": "Head"}, "imgsz": 512, "dynamic": true}')
+shutil.copy(onnx_p, out/'models/valorant_v11n/model.onnx')
+(out/'models/valorant_v11n/model.json').write_text('{"names": {"0": "Body", "1": "Head"}, "imgsz": 512, "dynamic": true}')
 shutil.copy(best, out/'teacher_free_best.pt')
 subprocess.run(['zip','-rq','val_student.zip','val_student'], cwd='/kaggle/working')
 print('DONE -> 下载 /kaggle/working/val_student.zip, 把 model.onnx 丢给我或放 WSL 仓库 models/ 下')
