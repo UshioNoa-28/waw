@@ -484,6 +484,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.min_speed = cfg.aim_floor
         if cfg.imgsz and getattr(detector, "imgsz", None) and cfg.imgsz != detector.imgsz:
             detector.imgsz = cfg.imgsz      # model is dynamic-shape: hot resize
+        if capture.crop_size != cfg.crop_size:
+            capture.crop_size = cfg.crop_size  # hot resize capture square
         engine.p.burst = cfg.burst
         engine.p.burst_cooldown = cfg.burst_cooldown
         engine.p.burst_gain = cfg.burst_gain

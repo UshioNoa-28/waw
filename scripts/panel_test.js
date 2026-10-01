@@ -11,7 +11,7 @@ const sent = [];
 let state = {
   bt_host: "192.168.1.115", bt_port: 47800, target_classes: "Head", classes: "", sens: 0,
   aim_gain: 0, aim_lead: 0, head_bias: 0.55, head_offset_y: 0,
-  fov_radius: 300, conf_threshold: 0.3, move_fraction: 0.7, max_step: 500, smoothing: 0.55,
+  fov_radius: 300, conf_threshold: 0.3, crop_size: 640, imgsz: 320, move_fraction: 0.7, max_step: 500, smoothing: 0.55,
   deadzone: 4, aim_dz_frac: 0.25, fire_radius: 12, fps: 60, aim_comp: 4, aim_cw: 1, aim_floor: 2,
   burst: true, burst_cooldown: 0.28, burst_gain: 1.0, settle_ms: 90, settle_frac: 1.6,
   arrive_px: 8, resume_px: 32,
@@ -67,6 +67,8 @@ const last = (k) => [...sent].reverse().find((s) => k in s);
   check("T3b burst checkbox reflects state", document.getElementById("burst").checked === true);
   check("T3c cooldown value filled", document.getElementById("burst_cooldown").value === "0.28");
   check("T3d max_step slider allows 600", document.getElementById("max_step").max === "600");
+  for (const id of ["crop_size", "imgsz"]) check(`T3e control ${id} present`, !!document.getElementById(id));
+  check("T3f fov slider reaches fullscreen", document.getElementById("fov_radius").max === "1400");
 
   // slider input sends patch
   const sl = document.getElementById("settle_ms");
