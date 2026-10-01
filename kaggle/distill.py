@@ -94,7 +94,7 @@ for sp, lst in split.items():
     (d/'labels').mkdir(parents=True, exist_ok=True)
     for p in lst:
         if not (d/'images'/p.name).exists(): shutil.copy(p, d/'images'/p.name)
-        shutil.copy(LAB/(p.stem+'.txt'), d/'labels'/p.stem+'.txt')
+        shutil.copy(LAB/(p.stem+'.txt'), (d/'labels')/(p.stem+'.txt'))
 YAML = '/kaggle/working/valorant.yaml'
 open(YAML,'w').write(f'''path: {WORK}
 train: train/images
