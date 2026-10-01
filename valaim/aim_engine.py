@@ -198,6 +198,8 @@ class AimEngine:
                 if len(self._bacc) > 12:
                     self._bacc.pop(0)
             self._bpx = (dx, dy)
+            if not settled:
+                self._bacc = []      # sweep frames are garbage for aiming
 
             landed = False
             if p.burst_early and self._bref is not None and self._bexp > 25.0 \
