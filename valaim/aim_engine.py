@@ -89,6 +89,10 @@ class AimEngine:
         self._bacc: list = []   # (t, dx, dy) post-flight observation accumulator
         self._dbg = None              # (smx, smy, inflx, infly, rawx, rawy)
 
+    @property
+    def is_latched(self) -> bool:
+        return self._latched
+
     def reset(self) -> None:
         self._sx = self._sy = None
         self._carry_x = self._carry_y = 0.0

@@ -15,7 +15,7 @@ let state = {
   deadzone: 4, aim_dz_frac: 0.25, fire_radius: 12, fps: 60, aim_comp: 4, aim_cw: 1, aim_floor: 2,
   burst: true, burst_cooldown: 0.28, burst_gain: 1.0, settle_ms: 90, settle_frac: 1.6,
   arrive_px: 8, resume_px: 32,
-  triggerbot: false, debug: false,
+  triggerbot: false, debug: false, latch_throttle: true,
   status: "空闲 - 确认手机 App 已连接后点启动。", running: false, raw_sink: true,
 };
 
@@ -89,6 +89,7 @@ const last = (k) => [...sent].reverse().find((s) => k in s);
   bu.checked = false;
   bu.dispatchEvent(new window.Event("change", { bubbles: true }));
   await sleep(50);
+  check("T5b latch_throttle reflects state", document.getElementById("latch_throttle").checked === true);
   check("T6 burst bool patch sent", last("burst") && last("burst").burst === false);
 
   // text input not clobbered while focused

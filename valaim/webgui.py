@@ -133,7 +133,7 @@ class Panel:
                         self.cfg.bt_port = int(value)
                     except ValueError:
                         return "bad port"
-                elif key in ("debug", "triggerbot", "burst"):
+                elif key in ("debug", "triggerbot", "burst", "latch_throttle"):
                     setattr(self.cfg, key, bool(value))
             return None
 
@@ -269,6 +269,7 @@ button:disabled{opacity:.4;cursor:default}
 
 <div class="card"><h2>触发与辅助</h2>
 <div class="row"><label>自动开火(吸上钉住后手机替你按左键)</label><input type=checkbox id="triggerbot"></div>
+<div class="row"><label>钉住时半速检测(给游戏让出显卡)</label><input type=checkbox id="latch_throttle"></div>
 <div class="row"><label>开火半径(px)</label><input type=range id="fire_radius" min=4 max=60 step=2 style="flex:1"><span class=val id="fire_radius_v"></span></div>
 <div class="row"><label>显示画面预览(debug 窗口)</label><input type=checkbox id="debug"></div>
 <div class="hint">说明:游戏在前台时 Vanguard 屏蔽一切第三方按键读取,键盘/侧键绑定无效——吸附默认常驻开启,想暂停按手机 App 上的「锁定」按钮。</div>
@@ -299,6 +300,7 @@ function fill(s){
   const tb=document.getElementById("triggerbot"); if(tb&&tb!==act) tb.checked=!!s.triggerbot;
   const dg=document.getElementById("debug"); if(dg&&dg!==act) dg.checked=!!s.debug;
   const bu=document.getElementById("burst"); if(bu&&bu!==act) bu.checked=!!s.burst;
+  const lt=document.getElementById("latch_throttle"); if(lt&&lt!==act) lt.checked=!!s.latch_throttle;
   for(const k of NUM){
     const el=document.getElementById(k);
     if(el!==act) el.value=s[k];
@@ -320,12 +322,12 @@ function send(obj){
 }
 function track(id){
   const el=document.getElementById(id);
-  const push=()=>send(id==="triggerbot"?{triggerbot:el.checked}:id==="debug"?{debug:el.checked}:id==="burst"?{burst:el.checked}:{[id]:el.value});
+  const push=()=>send(id==="triggerbot"?{triggerbot:el.checked}:id==="debug"?{debug:el.checked}:id==="burst"?{burst:el.checked}:id==="latch_throttle"?{latch_throttle:el.checked}:{[id]:el.value});
   if(el.type==="checkbox") el.addEventListener("change",push);
   else{ el.addEventListener("input",push); el.addEventListener("change",push); }
 }
 NUM.forEach(track);
-["bt_host","bt_port","classes","sens","triggerbot","debug","burst"].forEach(track);
+["bt_host","bt_port","classes","sens","triggerbot","debug","burst","latch_throttle"].forEach(track);
 function postp(path){return fetch(path,{method:"POST"});}
 document.getElementById("start").onclick=async()=>{
   await send({bt_host:document.getElementById("bt_host").value,bt_port:document.getElementById("bt_port").value});

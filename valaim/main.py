@@ -58,6 +58,7 @@ def parse_args() -> argparse.Namespace:
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
     p.add_argument("--deadzone", type=float, default=4.0, help="Fixed stop radius in pixels (used when --dz-frac 0)")
     p.add_argument("--dz-frac", type=float, default=0.25, help="Deadzone as fraction of head-box width (0=fixed --deadzone)")
+    p.add_argument("--no-latch-throttle", dest="latch_throttle", action="store_false", help="Disable half-rate detection while latched")
     p.add_argument("--no-burst", dest="burst", action="store_false", help="Disable one-stroke burst mode (revert to per-frame loop)")
     p.add_argument("--burst-cooldown", type=float, default=0.28, help="Silence after a burst stroke (s)")
     p.add_argument("--burst-gain", type=float, default=1.0, help="Fraction of error per stroke")
@@ -138,6 +139,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         smoothing=args.smoothing,
         deadzone=args.deadzone,
         aim_dz_frac=args.dz_frac,
+        latch_throttle=args.latch_throttle,
         burst=args.burst,
         burst_cooldown=args.burst_cooldown,
         burst_gain=args.burst_gain,
@@ -452,7 +454,9 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     shooting = False
     frames = 0
     vel: dict = {}
-    lock_on = True  # phone [锁定] button toggles (Vanguard hides all local keys in game)
+    lock_on = True
+    tick = 0
+    det_cache = None  # phone [锁定] button toggles (Vanguard hides all local keys in game)
     trace = None
     trace_f = None
     if cfg.log_aim:
@@ -501,8 +505,13 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.min_speed = cfg.aim_floor
         engine.p.comp_frames = cfg.aim_comp
         engine.p.comp_weight = max(0.0, min(1.0, cfg.aim_cw))
-        img, crop_x, crop_y, crop_w, crop_h = capture.grab()
-        detections = detector.detect(img, crop_x, crop_y)
+        if cfg.latch_throttle and engine.is_latched and det_cache is not None and (tick % 2 == 0):
+            img, crop_x, crop_y, crop_w, crop_h, detections = det_cache
+        else:
+            img, crop_x, crop_y, crop_w, crop_h = capture.grab()
+            detections = detector.detect(img, crop_x, crop_y)
+            det_cache = (img, crop_x, crop_y, crop_w, crop_h, detections)
+        tick += 1
         cursor = capture.crosshair()
         # Trigger selection. fire_button mode: aim while the button is held and
         # the virtual left click is emitted once locked.

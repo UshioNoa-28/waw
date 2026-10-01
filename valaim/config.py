@@ -45,6 +45,7 @@ class AimConfig:
     trace_path: str = "aim_trace.csv"
     start_delay: float = 3.0
     aim_comp: int = 4
+    latch_throttle: bool = True   # half-rate detection while nailed down
     burst: bool = True
     burst_cooldown: float = 0.28
     burst_gain: float = 1.0
