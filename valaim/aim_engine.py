@@ -209,7 +209,7 @@ class AimEngine:
                 return 0, 0
             else:
                 pool = [(t_, ox, oy) for (t_, ox, oy) in self._bacc
-                        if t_ >= self._burst_t + 0.08]
+                        if t_ >= self._burst_t + 0.08][-3:]
                 if pool:
                     sx = sum(o[1] for o in pool) / len(pool)
                     sy = sum(o[2] for o in pool) / len(pool)
