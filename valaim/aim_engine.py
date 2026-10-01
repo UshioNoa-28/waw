@@ -198,8 +198,6 @@ class AimEngine:
                 if len(self._bacc) > 12:
                     self._bacc.pop(0)
             self._bpx = (dx, dy)
-            if not settled:
-                self._bacc = []      # sweep frames are garbage for aiming
 
             landed = False
             if p.burst_early and self._bref is not None and self._bexp > 25.0 \
@@ -208,14 +206,16 @@ class AimEngine:
                 landed = True          # previous stroke visibly arrived
 
             distb = math.hypot(self._sx, self._sy)
-            # Stability gate: a mid-flick re-lock (crosshair sweeping past an
-            # enemy) churns within a couple frames; a real acquire settles.
-            # Fire only once the error has been quiet AND the lock is old enough.
             obs_moved = 0.0
             if self._last_obs is not None:
                 obs_moved = math.hypot(dx - self._last_obs[0], dy - self._last_obs[1])
             self._last_obs = (dx, dy)
+            # Stability gate: a mid-flick re-lock (crosshair sweeping past an
+            # enemy) churns within a couple frames; a real acquire settles.
+            # Fire (and even collect aim frames) only after the hand lands.
             settled = True if self._lock_at is None else (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < p.settle_px)
+            if not settled:
+                self._bacc = []
             if landed or distb > dz:
                 if not landed and not settled:
                     return 0, 0
