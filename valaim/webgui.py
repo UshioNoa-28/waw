@@ -87,6 +87,8 @@ NUMERIC = {
     "deadzone": float, "aim_dz_frac": float, "fps": int, "trigger_radius": int, "aim_gain": float,
     "aim_lead": float, "sens": float, "fire_radius": int,
     "aim_floor": float, "aim_comp": int, "aim_cw": float,
+    "burst_cooldown": float, "burst_gain": float, "settle_ms": float, "settle_frac": float,
+    "arrive_px": float, "resume_px": float,
 }
 
 
@@ -149,7 +151,7 @@ class Panel:
                         self.cfg.keybind = ""
                         self.cfg.hold_button = ""
                         self.cfg.fire_button = ""
-                elif key in ("debug", "triggerbot"):
+                elif key in ("debug", "triggerbot", "burst"):
                     setattr(self.cfg, key, bool(value))
             return None
 
@@ -261,12 +263,19 @@ button:disabled{opacity:.4;cursor:default}
 </div>
 
 <div class="card"><h2>移动手感</h2>
-<div class="row"><label>移动系数(越大越猛)</label><input type=range id="move_fraction" min=0.05 max=1 step=0.01><span class=val id="move_fraction_v"></span></div>
-<div class="row"><label>移动提前量(秒,补延迟)</label><input type=range id="aim_lead" min=0 max=0.3 step=0.01><span class=val id="aim_lead_v"></span></div>
-<div class="row"><label>在途补偿(帧,0=关)</label><input type=range id="aim_comp" min=0 max=8 step=1><span class=val id="aim_comp_v"></span></div>
+<div class="row"><label>单发吸附(推荐开:一枪到位再补)</label><input type=checkbox id="burst"></div>
+<div class="row"><label>开火后间隔(秒,≥你的网络延迟)</label><input type=range id="burst_cooldown" min=0.1 max=0.5 step=0.01><span class=val id="burst_cooldown_v"></span></div>
+<div class="row"><label>弹道力度(误差×系数)</label><input type=range id="burst_gain" min=0.5 max=1.3 step=0.05><span class=val id="burst_gain_v"></span></div>
+<div class="row"><label>稳定门(毫秒,手停才开火)</label><input type=range id="settle_ms" min=30 max=250 step=5><span class=val id="settle_ms_v"></span></div>
+<div class="row"><label>稳定阈值(头框宽×)</label><input type=range id="settle_frac" min=0.8 max=3 step=0.1><span class=val id="settle_frac_v"></span></div>
+<div class="row"><label>吸住半径(px)</label><input type=range id="arrive_px" min=0 max=20 step=1><span class=val id="arrive_px_v"></span></div>
+<div class="row"><label>脱锁半径(px)</label><input type=range id="resume_px" min=8 max=80 step=2><span class=val id="resume_px_v"></span></div>
+<div class="row"><label>每帧最大移动(计数)</label><input type=range id="max_step" min=2 max=600 step=10><span class=val id="max_step_v"></span></div>
+<div class="row"><label>移动系数(仅单发关闭时)</label><input type=range id="move_fraction" min=0.05 max=1 step=0.01><span class=val id="move_fraction_v"></span></div>
+<div class="row"><label>移动提前量(秒,仅单发关闭时)</label><input type=range id="aim_lead" min=0 max=0.3 step=0.01><span class=val id="aim_lead_v"></span></div>
+<div class="row"><label>在途补偿(帧,仅单发关闭时)</label><input type=range id="aim_comp" min=0 max=8 step=1><span class=val id="aim_comp_v"></span></div>
 <div class="row"><label>补偿权重</label><input type=range id="aim_cw" min=0 max=1 step=0.05><span class=val id="aim_cw_v"></span></div>
-<div class="row"><label>最低速度(计数/帧)</label><input type=range id="aim_floor" min=0 max=6 step=0.5><span class=val id="aim_floor_v"></span></div>
-<div class="row"><label>每帧最大移动(计数)</label><input type=range id="max_step" min=2 max=127 step=1><span class=val id="max_step_v"></span></div>
+<div class="row"><label>最低速度(计数/帧,仅单发关闭时)</label><input type=range id="aim_floor" min=0 max=6 step=0.5><span class=val id="aim_floor_v"></span></div>
 <div class="row"><label>平滑(越小越稳)</label><input type=range id="smoothing" min=0.05 max=1 step=0.01><span class=val id="smoothing_v"></span></div>
 <div class="row"><label>死区比例(头框宽×)</label><input type=range id="aim_dz_frac" min=0 max=0.5 step=0.01><span class=val id="aim_dz_frac_v"></span></div>
 <div class="row"><label>死区(固定像素)</label><input type=range id="deadzone" min=0 max=20 step=0.5><span class=val id="deadzone_v"></span></div>
@@ -293,8 +302,8 @@ button:disabled{opacity:.4;cursor:default}
 <div id="status">加载中...</div>
 
 <script>
-const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_dz_frac","aim_gain","aim_lead","aim_comp","aim_cw","aim_floor","fire_radius","fps"];
-const DEC={head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,aim_comp:0,aim_cw:2,aim_floor:1,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,aim_dz_frac:2,fps:0,head_offset_y:0};
+const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_dz_frac","aim_gain","aim_lead","aim_comp","aim_cw","aim_floor","fire_radius","fps","burst_cooldown","burst_gain","settle_ms","settle_frac","arrive_px","resume_px"];
+const DEC={burst_cooldown:2,burst_gain:2,settle_ms:0,settle_frac:1,arrive_px:0,resume_px:0,head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,aim_comp:0,aim_cw:2,aim_floor:1,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,aim_dz_frac:2,fps:0,head_offset_y:0};
 const KEYMAP={"Space":"SPACE","Tab":"TAB","Enter":"ENTER"};
 function codeToName(code){
   let m;
@@ -366,6 +375,7 @@ function fill(s){
   const fb=document.getElementById("fire_button"); if(fb&&fb!==act) fb.value=s.fire_button||"";
   const tb=document.getElementById("triggerbot"); if(tb&&tb!==act) tb.checked=!!s.triggerbot;
   const dg=document.getElementById("debug"); if(dg&&dg!==act) dg.checked=!!s.debug;
+  const bu=document.getElementById("burst"); if(bu&&bu!==act) bu.checked=!!s.burst;
   for(const k of NUM){
     const el=document.getElementById(k);
     if(el!==act) el.value=s[k];
@@ -388,12 +398,12 @@ function send(obj){
 }
 function track(id){
   const el=document.getElementById(id);
-  const push=()=>send(id==="always_on"?{always_on:el.checked}:id==="triggerbot"?{triggerbot:el.checked}:id==="debug"?{debug:el.checked}:{[id]:el.value});
+  const push=()=>send(id==="always_on"?{always_on:el.checked}:id==="triggerbot"?{triggerbot:el.checked}:id==="debug"?{debug:el.checked}:id==="burst"?{burst:el.checked}:{[id]:el.value});
   if(el.type==="checkbox") el.addEventListener("change",push);
   else{ el.addEventListener("input",push); el.addEventListener("change",push); }
 }
 NUM.forEach(track);
-["bt_host","bt_port","classes","trigger","fire_button","sens","always_on","triggerbot","debug"].forEach(track);
+["bt_host","bt_port","classes","trigger","fire_button","sens","always_on","triggerbot","debug","burst"].forEach(track);
 function postp(path){return fetch(path,{method:"POST"});}
 document.getElementById("start").onclick=async()=>{
   await send({bt_host:document.getElementById("bt_host").value,bt_port:document.getElementById("bt_port").value});

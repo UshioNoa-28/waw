@@ -482,6 +482,11 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.deadzone = cfg.deadzone
         engine.p.dz_frac = cfg.aim_dz_frac
         engine.p.min_speed = cfg.aim_floor
+        engine.p.burst = cfg.burst
+        engine.p.burst_cooldown = cfg.burst_cooldown
+        engine.p.burst_gain = cfg.burst_gain
+        engine.p.settle_ms = cfg.settle_ms
+        engine.p.settle_frac = cfg.settle_frac
         engine.p.comp_frames = cfg.aim_comp
         engine.p.comp_weight = max(0.0, min(1.0, cfg.aim_cw))
         engine.p.counts_per_px = cfg.aim_gain if cfg.aim_gain > 0 else (cal_gain or 1.0)
