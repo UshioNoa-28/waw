@@ -83,6 +83,8 @@ class AimEngine:
         self._latched = False         # arrived: output suppressed
         self._burst_t = -9e9
         self._last_obs: tuple | None = None
+        self._land_armed = False
+        self._bu = (1.0, 0.0)
         self._bexp = 0.0      # expected px drop of the in-flight stroke
         self._bref = None     # observation at fire time (for landing detection)
         self._bpx = None   # previous raw observation (spike clamp ref)
@@ -204,31 +206,38 @@ class AimEngine:
                     self._bacc.pop(0)
             self._bpx = (dx, dy)
 
-            # Landing = big progress-vs-fire-point AND the frame is otherwise
-            # CALM. Without the calm clause, the user's own flick (screen
-            # jumping 60-200px/frame) fakes a "landing" and the engine fires
-            # mid-swing at whatever the crosshair sweeps past (measured: 71%
-            # of strokes in one live session).
+            # frame-to-frame motion of the raw observation (user flick vs calm)
+            obs_moved = 0.0
+            if self._last_obs is not None:
+                obs_moved = math.hypot(dx - self._last_obs[0], dy - self._last_obs[1])
+            self._last_obs = (dx, dy)
+
+            # Stability gate: fire (and collect aim frames) only when the lock
+            # is old enough AND the frame is calm.
             thr = p.settle_px
             if p.settle_frac > 0 and box_w > 0:
                 thr = max(15.0, p.settle_frac * box_w)
             settled = True if self._lock_at is None else (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < thr)
             if not settled:
                 self._bacc = []
+
+            # Landing signature (two-beat): one frame that moved BACK toward
+            # the target by ~45% of the last stroke ALONG its direction, then
+            # a calm frame. A user's flick never produces the calm-after-
+            # aligned pair - it keeps jumping - while our stroke landing does.
+            # (Fires during swings were 71% of strokes before this.)
             landed = False
             if p.burst_early and self._bref is not None and self._bexp > 25.0 \
-                    and nowb - self._burst_t >= 0.025 \
-                    and obs_moved < thr \
-                    and math.hypot(dx - self._bref[0], dy - self._bref[1]) >= 0.45 * self._bexp:
-                landed = True          # previous stroke visibly arrived
+                    and nowb - self._burst_t >= 0.025:
+                if self._land_armed and obs_moved < thr:
+                    landed = True
+                    self._land_armed = False
+                else:
+                    px_ = -(dx - self._bref[0]) * self._bu[0] - (dy - self._bref[1]) * self._bu[1]
+                    if px_ >= 0.45 * self._bexp:
+                        self._land_armed = True
 
             distb = math.hypot(self._sx, self._sy)
-            obs_moved = 0.0
-            if self._last_obs is not None:
-                obs_moved = math.hypot(dx - self._last_obs[0], dy - self._last_obs[1])
-            self._last_obs = (dx, dy)
-            if not settled:
-                self._bacc = []
             if landed or distb > dz:
                 if not landed and not settled:
                     return 0, 0
@@ -262,6 +271,9 @@ class AimEngine:
                 self._burst_t = nowb
                 self._bref = (sx, sy)
                 self._bexp = math.hypot(ix, iy) / cp0
+                mb = math.hypot(ix, iy) or 1.0
+                self._bu = (ix / mb, iy / mb)
+                self._land_armed = False
                 self._hist.append((nowb, ix / cp0, iy / cp0))
             self._bacc = [] if landed or (ix or iy) else self._bacc
             return ix, iy
