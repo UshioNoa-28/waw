@@ -52,22 +52,20 @@ class TargetSelector:
         # the stroke reverses ("round-trip" seen in real13/real15/real17).
         keep = self.locked
         if keep is not None:
-            match: Detection | None = None
+            best_match: Target | None = None
             for det in detections:
                 if not self._allowed(det):
                     continue
                 x, y = self._aim_point(det)
-                if math.hypot(x - keep.x, y - keep.y) < 45.0:
-                    match = det
-                    keep = Target(det=det, x=x, y=y,
-                                  distance=math.hypot(x - cursor[0], y - cursor[1]),
-                                  score=99.0)
-                    break
-            if match is None:
+                drift = math.hypot(x - keep.x, y - keep.y)
+                if drift < 25.0 and (best_match is None or drift < best_match.distance):
+                    best_match = Target(det=det, x=x, y=y, distance=drift, score=99.0)
+            if best_match is None:
                 self.locked = None
             else:
-                self.locked = keep
-                return keep
+                self.locked = best_match
+                best_match.distance = math.hypot(best_match.x - cursor[0], best_match.y - cursor[1])
+                return best_match
 
         for det in detections:
             if not self._allowed(det):
