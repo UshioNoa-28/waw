@@ -39,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--capture-anchor", default="crosshair", choices=["crosshair", "cursor"])
     p.add_argument("--crop", type=int, default=640)
     p.add_argument("--monitor", type=int, default=0)
+    p.add_argument("--team-guard", action="store_true", help="After latching, verify enemy via red crosshair pixels; ban non-enemy boxes briefly")
     p.add_argument("--min-head", type=float, default=14.0, help="Ignore targets with head-box narrower than this (px)")
     p.add_argument("--conf", type=float, default=0.5)
     p.add_argument("--iou", type=float, default=0.45)
@@ -150,6 +151,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         aim_dz_frac=args.dz_frac,
         latch_throttle=args.latch_throttle,
         async_pipeline=args.async_pipeline,
+        team_guard=args.team_guard,
         burst=args.burst,
         burst_cooldown=args.burst_cooldown,
         burst_gain=args.burst_gain,
@@ -665,6 +667,22 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                     action = f"move {mx:+d},{my:+d}"
                 else:
                     action = "hold (deadzone)"
+                if cfg.team_guard and engine.is_latched and not cfg.aim_off:
+                    ih, iw = img.shape[:2]
+                    ix = int(cursor[0] - crop_x)
+                    iy = int(cursor[1] - crop_y)
+                    if 10 <= ix < iw - 10 and 10 <= iy < ih - 10:
+                        patch = img[iy - 9:iy + 10, ix - 9:ix + 10]
+                        pr = patch[..., 2].astype(int)
+                        pg = patch[..., 1].astype(int)
+                        pb = patch[..., 0].astype(int)
+                        redpx = int(((pr > 140) & (pr - pg > 60) & (pr - pb > 60)).sum())
+                        if redpx < cfg.red_min_px:
+                            selector.ban(target.x, target.y)
+                            engine.on_new_lock()
+                            action = f"team-guard: not enemy ({redpx}px red), banned"
+                        else:
+                            action = f"nail (enemy {redpx}px)" 
             else:
                 action = "locked (already close)"
 

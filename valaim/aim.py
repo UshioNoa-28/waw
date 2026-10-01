@@ -18,6 +18,19 @@ class TargetSelector:
     def __init__(self, cfg: AimConfig):
         self.cfg = cfg
         self.locked: Target | None = None
+        self._banned: list = []   # (x, y, expiry) points confirmed NOT enemy
+
+    def ban(self, x: float, y: float, seconds: float = 2.0) -> None:
+        import time as _t
+        self._banned.append((x, y, _t.monotonic() + seconds))
+        if len(self._banned) > 16:
+            self._banned.pop(0)
+
+    def _banned_here(self, x: float, y: float) -> bool:
+        import time as _t
+        now = _t.monotonic()
+        self._banned = [b for b in self._banned if b[2] > now]
+        return any(math.hypot(x - bx, y - by) < 42.0 for bx, by, _ in self._banned)
 
     def _allowed(self, det: Detection) -> bool:
         mh = getattr(self.cfg, "min_head_px", 0.0)
@@ -62,6 +75,8 @@ class TargetSelector:
                 if not self._allowed(det):
                     continue
                 x, y = self._aim_point(det)
+                if self._banned_here(x, y):
+                    continue
                 drift = math.hypot(x - keep.x, y - keep.y)
                 if drift < 25.0 and (best_match is None or drift < best_match.distance):
                     best_match = Target(det=det, x=x, y=y, distance=drift, score=99.0)
@@ -77,6 +92,8 @@ class TargetSelector:
                 continue
 
             x, y = self._aim_point(det)
+            if self._banned_here(x, y):
+                continue
             distance = math.hypot(x - cursor[0], y - cursor[1])
 
             if distance > self.cfg.fov_radius:
