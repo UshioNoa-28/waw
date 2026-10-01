@@ -14,6 +14,7 @@ class DxcamCapture:
         self._base = base
         self._cam = None
         self._dead = False
+        self._starve = 0
         self._last = None
         self._open()
 
@@ -65,10 +66,16 @@ class DxcamCapture:
                 frame = self._cam.grab()
             if frame is not None:
                 self._last = frame[:, :, :3]
-            # static desktop == no new presents; the previous frame IS the
-            # current truth - reuse instead of dying
-            if self._last is None:
-                raise TimeoutError("duplication has not produced a frame yet")
+            if frame is None:
+                # A momentary miss on a static desktop is fine to reuse; a
+                # duplication that keeps starving (exclusive-mode flip, flaky
+                # access-lost loops) must NEVER feed stale frames to the aim
+                # loop - downgrade instead.
+                self._starve += 1
+                if self._starve > 6 or self._last is None:
+                    raise TimeoutError("duplication starved")
+            else:
+                self._starve = 0
             return self._last.copy(), x, y, w, h
         except Exception as exc:
             # exclusive-fullscreen games kill duplication; never let the aim
