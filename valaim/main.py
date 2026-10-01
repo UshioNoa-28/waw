@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--dz-frac", type=float, default=0.25, help="Deadzone as fraction of head-box width (0=fixed --deadzone)")
     p.add_argument("--no-burst", dest="burst", action="store_false", help="Disable one-stroke burst mode (revert to per-frame loop)")
     p.add_argument("--burst-cooldown", type=float, default=0.28, help="Silence after a burst stroke (s)")
-    p.add_argument("--burst-gain", type=float, default=0.95, help="Fraction of error per stroke")
+    p.add_argument("--burst-gain", type=float, default=1.0, help="Fraction of error per stroke")
     p.add_argument("--aim-gain", type=float, default=0.0,
                    help="Mouse counts per screen pixel (0 = auto from calib file / --sens)")
     p.add_argument("--sens", type=float, default=0.0,

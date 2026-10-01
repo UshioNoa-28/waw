@@ -1,0 +1,8 @@
+fatal: unable to access 'https://github.com/UshioNoa-28/waw.git/': gnutls_handshake() failed: The TLS connection was non-properly terminated.
+02:11:01 attempt 1 failed
+fatal: unable to access 'https://github.com/UshioNoa-28/waw.git/': gnutls_handshake() failed: The TLS connection was non-properly terminated.
+02:11:54 attempt 2 failed
+fatal: unable to access 'https://github.com/UshioNoa-28/waw.git/': gnutls_handshake() failed: The TLS connection was non-properly terminated.
+02:12:45 attempt 3 failed
+02:13:40 PUSHED (attempt 4)
+in_progress		Identified device model (D p50=136ms p90=267ms, WiFi RTT culprit, spi…	Build ValAim EXE	main	push	36757059833	8s	2026-09-30T18:13:43Z

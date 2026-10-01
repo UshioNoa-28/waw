@@ -76,8 +76,9 @@ class AimEngine:
         self._hist = []               # (t, px_x, px_y) commands not yet rendered
         self._raw: list = []          # recent raw errors for median filter
         self._latched = False         # arrived: output suppressed
-        self._burst_t = 0.0
-        self._bpx = None   # previous raw observation for burst 2-point median
+        self._burst_t = -9e9
+        self._bpx = None   # previous raw observation (spike clamp ref)
+        self._bsx = 0.0; self._bsy = 0.0; self._bn = 0  # silent-window observation accumulator
         self._dbg = None              # (smx, smy, inflx, infly, rawx, rawy)
 
     def reset(self) -> None:
@@ -99,6 +100,7 @@ class AimEngine:
         self._carry_x = self._carry_y = 0.0
         self._sx = self._sy = None
         self._bpx = None
+        self._bsx = self._bsy = 0.0; self._bn = 0
         lo = min(self.p.react_ms) / 1000.0
         hi = max(self.p.react_ms) / 1000.0
         self._gate = self._rng.uniform(lo, hi) if self.p.humanize else 0.0
@@ -182,18 +184,19 @@ class AimEngine:
                 self._carry_x = self._carry_y = 0.0
                 return 0, 0
             cp0 = max(0.05, p.counts_per_px)
-            # 2-point mean: a 1-frame detection spike (measured p50 18.5px at
-            # 4% of frames) would otherwise steer the whole stroke; averaging
-            # halves it while costing only half a frame of real-motion lag.
-            if self._bpx is None:
-                px_, py_ = dx, dy
-            else:
-                px_, py_ = (dx + self._bpx[0]) / 2.0, (dy + self._bpx[1]) / 2.0
+            # Aim at the MEAN of every observation since the last stroke. The
+            # silent window contains no actuation, so these frames are pure
+            # target+noise: averaging kills the measured 18.5px/4% spike and
+            # shrinks sigma ~sqrt(n), which is what turns 3 strokes into ~1.
+            ox, oy = dx, dy
+            if self._bpx is not None and math.hypot(ox - self._bpx[0], oy - self._bpx[1]) > 26.0:
+                ox, oy = self._bpx[0], self._bpx[1]   # drop the spike frame
             self._bpx = (dx, dy)
-            sx, sy = px_, py_
+            self._bsx += ox; self._bsy += oy; self._bn += 1
+            sx, sy = self._bsx / self._bn, self._bsy / self._bn
             distb = math.hypot(sx, sy)
             self._dbg = (sx, sy, 0.0, 0.0, sx, sy)
-            if distb <= dz or (self._burst_t and nowb - self._burst_t < p.burst_cooldown):
+            if distb <= dz or nowb - self._burst_t < p.burst_cooldown:
                 self._carry_x = self._carry_y = 0.0
                 return 0, 0
             g = max(0.05, min(1.5, p.burst_gain))
@@ -207,6 +210,7 @@ class AimEngine:
             if ix or iy:
                 self._burst_t = nowb
                 self._hist.append((nowb, ix / cp0, iy / cp0))
+            self._bsx = self._bsy = 0.0; self._bn = 0
             return ix, iy
 
         # Smith-predictor style compensation: our commands only appear in the
