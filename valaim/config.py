@@ -45,6 +45,7 @@ class AimConfig:
     aim_off: bool = False
     trace_path: str = "aim_trace.csv"
     start_delay: float = 3.0
+    dump_dir: str = ""
     aim_comp: int = 4
     latch_throttle: bool = True   # half-rate detection while nailed down
     burst: bool = True

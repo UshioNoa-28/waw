@@ -91,6 +91,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--log-aim", action="store_true", help="Record per-frame error+commands to aim_trace.csv")
     p.add_argument("--no-aim", action="store_true", help="Record only: never move the mouse (captures human flicks in-game)")
     p.add_argument("--trace", default="aim_trace.csv", help="Trace csv path for --log-aim")
+    p.add_argument("--dump-frames", default="", help="Directory: save each captured frame every ~0.5s (distillation dataset)")
     p.add_argument("--start-delay", type=float, default=3.0,
                    help="Seconds before aiming/recording/calibration starts (time to switch to the game)")
     p.add_argument("--triggerbot", action="store_true")
@@ -173,6 +174,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         log_aim=args.log_aim,
         aim_off=args.no_aim,
         trace_path=args.trace,
+        dump_dir=args.dump_frames,
         start_delay=args.start_delay,
         arrive_px=args.arrive_px,
         resume_px=args.resume_px,
@@ -458,7 +460,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     vel: dict = {}
     lock_on = True
     tick = 0
-    det_cache = None  # phone [锁定] button toggles (Vanguard hides all local keys in game)
+    det_cache = None
+    _dump_t = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
     trace = None
     trace_f = None
     if cfg.log_aim:
@@ -507,6 +510,15 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.min_speed = cfg.aim_floor
         engine.p.comp_frames = cfg.aim_comp
         engine.p.comp_weight = max(0.0, min(1.0, cfg.aim_cw))
+        if cfg.dump_dir and time.monotonic() - _dump_t >= 0.5:
+            _dump_t = time.monotonic()
+            try:
+                os.makedirs(cfg.dump_dir, exist_ok=True)
+                _fp = os.path.join(cfg.dump_dir, f"f{int(time.time()*10):d}_{len(os.listdir(cfg.dump_dir)):05d}.jpg")
+                import cv2 as _cv
+                _cv.imwrite(_fp, img, [_cv.IMWRITE_JPEG_QUALITY, 92])
+            except OSError:
+                pass
         if cfg.latch_throttle and engine.is_latched and det_cache is not None and (tick % 2 == 0):
             img, crop_x, crop_y, crop_w, crop_h, detections = det_cache
         else:
