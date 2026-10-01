@@ -39,7 +39,8 @@ class AimParams:
     burst_gain: float = 1.0       # fraction of error covered by the single stroke
     burst_min_px: float = 0.0     # (legacy) ignore strokes below this error
     settle_ms: float = 90.0       # hold fire until the lock has been stable this long
-    settle_px: float = 45.0       # ...and error moved less than this per frame (hand landed)
+    settle_px: float = 45.0       # absolute fallback when box width unknown
+    settle_frac: float = 1.6      # settle threshold = frac * head-box width (scale-invariant)
     burst_early: bool = True      # fire the next stroke as soon as the last one is SEEN to land (instead of waiting the full cooldown)
     arrive_px: float = 8.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 32.0       # ...and only resume past this (above spike band)
@@ -213,7 +214,10 @@ class AimEngine:
             # Stability gate: a mid-flick re-lock (crosshair sweeping past an
             # enemy) churns within a couple frames; a real acquire settles.
             # Fire (and even collect aim frames) only after the hand lands.
-            settled = True if self._lock_at is None else (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < p.settle_px)
+            thr = p.settle_px
+            if p.settle_frac > 0 and box_w > 0:
+                thr = max(15.0, p.settle_frac * box_w)
+            settled = True if self._lock_at is None else (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < thr)
             if not settled:
                 self._bacc = []
             if landed or distb > dz:
