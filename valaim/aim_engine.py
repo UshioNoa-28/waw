@@ -239,7 +239,10 @@ class AimEngine:
                 else:
                     sx, sy = dx, dy
             g = max(0.05, min(1.5, p.burst_gain))
-            bx, by = sx * g * cp0, sy * g * cp0
+            # moving-target compensation: caller-supplied velocity prediction
+            # (guarded against detection spikes upstream)
+            bx = (sx + lead_x) * g * cp0
+            by = (sy + lead_y) * g * cp0
             lim = max(1, p.max_step)   # phone HID layer splits >127 itself
             magb = math.hypot(bx, by)
             if magb > lim:
