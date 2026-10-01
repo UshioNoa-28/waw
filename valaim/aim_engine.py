@@ -36,7 +36,8 @@ class AimParams:
     slew_px: float = 0.0          # if >0, cap per-frame smoothed-target slew to this (px)
     burst: bool = False           # one full stroke per observation, then silence
     burst_cooldown: float = 0.15  # s of enforced silence after a burst (>actuation lag)
-    burst_gain: float = 0.95      # fraction of error covered by the single stroke
+    burst_gain: float = 1.0       # fraction of error covered by the single stroke
+    burst_early: bool = True      # fire the next stroke as soon as the last one is SEEN to land (instead of waiting the full cooldown)
     arrive_px: float = 8.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 32.0       # ...and only resume past this (above spike band)
     med_win: int = 1              # median filter width on raw error (1=off)
@@ -77,8 +78,10 @@ class AimEngine:
         self._raw: list = []          # recent raw errors for median filter
         self._latched = False         # arrived: output suppressed
         self._burst_t = -9e9
+        self._bexp = 0.0      # expected px drop of the in-flight stroke
+        self._bref = None     # observation at fire time (for landing detection)
         self._bpx = None   # previous raw observation (spike clamp ref)
-        self._bsx = 0.0; self._bsy = 0.0; self._bn = 0  # silent-window observation accumulator
+        self._bacc: list = []   # (t, dx, dy) post-flight observation accumulator
         self._dbg = None              # (smx, smy, inflx, infly, rawx, rawy)
 
     def reset(self) -> None:
@@ -100,7 +103,6 @@ class AimEngine:
         self._carry_x = self._carry_y = 0.0
         self._sx = self._sy = None
         self._bpx = None
-        self._bsx = self._bsy = 0.0; self._bn = 0
         lo = min(self.p.react_ms) / 1000.0
         hi = max(self.p.react_ms) / 1000.0
         self._gate = self._rng.uniform(lo, hi) if self.p.humanize else 0.0
@@ -172,11 +174,10 @@ class AimEngine:
             self._sx += a * (dx - self._sx)
             self._sy += a * (dy - self._sy)
 
-        # Burst mode: one complete stroke per observation window. During the
-        # cooldown NOTHING is sent, so commands can never stack up while older
-        # ones are still crossing the BT/screenshot lag. This is the structural
-        # cure for the A->B->C signature (measured: chained re-sends during
-        # 70-170ms tails survived every PID/compensation tweak).
+        # Burst mode: one complete stroke per observation window. The next
+        # stroke fires either when the previous one is SEEN to land (early,
+        # evidence-based) or when the cooldown elapses (fallback, covers the
+        # measured D90=267ms network tail).
         if p.burst:
             nowb = time.monotonic()
             if use_latch and raw_dist <= p.arrive_px:
@@ -184,21 +185,36 @@ class AimEngine:
                 self._carry_x = self._carry_y = 0.0
                 return 0, 0
             cp0 = max(0.05, p.counts_per_px)
-            # Aim at the MEAN of every observation since the last stroke. The
-            # silent window contains no actuation, so these frames are pure
-            # target+noise: averaging kills the measured 18.5px/4% spike and
-            # shrinks sigma ~sqrt(n), which is what turns 3 strokes into ~1.
-            ox, oy = dx, dy
-            if self._bpx is not None and math.hypot(ox - self._bpx[0], oy - self._bpx[1]) > 26.0:
-                ox, oy = self._bpx[0], self._bpx[1]   # drop the spike frame
+            # accumulate post-flight observations, skip spike frames
+            if self._bpx is not None and math.hypot(dx - self._bpx[0], dy - self._bpx[1]) > 26.0:
+                spike = True
+            else:
+                spike = False
+                self._bacc.append((nowb, dx, dy))
+                if len(self._bacc) > 12:
+                    self._bacc.pop(0)
             self._bpx = (dx, dy)
-            self._bsx += ox; self._bsy += oy; self._bn += 1
-            sx, sy = self._bsx / self._bn, self._bsy / self._bn
-            distb = math.hypot(sx, sy)
-            self._dbg = (sx, sy, 0.0, 0.0, sx, sy)
-            if distb <= dz or nowb - self._burst_t < p.burst_cooldown:
-                self._carry_x = self._carry_y = 0.0
+
+            landed = False
+            if p.burst_early and self._bref is not None and self._bexp > 25.0 \
+                    and nowb - self._burst_t >= 0.025 \
+                    and math.hypot(dx - self._bref[0], dy - self._bref[1]) >= 0.45 * self._bexp:
+                landed = True          # previous stroke visibly arrived
+
+            distb = math.hypot(self._sx, self._sy)
+            sx = sy = 0.0
+            if landed:
+                sx, sy = dx, dy        # aim at the fresh landed observation
+            elif distb <= dz or nowb - self._burst_t < p.burst_cooldown:
                 return 0, 0
+            else:
+                pool = [(t_, ox, oy) for (t_, ox, oy) in self._bacc
+                        if t_ >= self._burst_t + 0.08]
+                if pool:
+                    sx = sum(o[1] for o in pool) / len(pool)
+                    sy = sum(o[2] for o in pool) / len(pool)
+                else:
+                    sx, sy = dx, dy
             g = max(0.05, min(1.5, p.burst_gain))
             bx, by = sx * g * cp0, sy * g * cp0
             lim = max(1, p.max_step)   # phone HID layer splits >127 itself
@@ -209,8 +225,10 @@ class AimEngine:
             ix, iy = int(round(bx)), int(round(by))
             if ix or iy:
                 self._burst_t = nowb
+                self._bref = (sx, sy)
+                self._bexp = math.hypot(ix, iy) / cp0
                 self._hist.append((nowb, ix / cp0, iy / cp0))
-            self._bsx = self._bsy = 0.0; self._bn = 0
+            self._bacc = [] if landed or (ix or iy) else self._bacc
             return ix, iy
 
         # Smith-predictor style compensation: our commands only appear in the
