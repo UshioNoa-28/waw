@@ -64,6 +64,7 @@ print('teacher classes:', t.names)
 
 LAB = WORK/'labels'; LAB.mkdir(exist_ok=True)
 files = sorted(IMGS.glob('*'))
+files = [p for p in files if not (LAB/(p.stem+'.txt')).exists()]   # 缓存: 已标注不重跑
 BATCH = 8
 for i in range(0, len(files), BATCH):
     b = files[i:i+BATCH]
@@ -88,16 +89,16 @@ random.seed(7); random.shuffle(keep)
 n_val = max(30, len(keep)//8)
 split = {'train': keep[n_val:], 'val': keep[:n_val]}
 for sp, lst in split.items():
-    d = WORK/sp; d.mkdir(exist_ok=True)
+    d = WORK/sp
+    (d/'images').mkdir(parents=True, exist_ok=True)
+    (d/'labels').mkdir(parents=True, exist_ok=True)
     for p in lst:
-        if not (d/p.name).exists(): shutil.copy(p, d/p.name)
-        ld = WORK/f'{sp}labels'; ld.mkdir(exist_ok=True)
-        shutil.copy(LAB/(p.stem+'.txt'), ld/p.with_suffix('.txt').name)
-    open(d/'dirs.txt','w').write('')  # marker
+        if not (d/'images'/p.name).exists(): shutil.copy(p, d/'images'/p.name)
+        shutil.copy(LAB/(p.stem+'.txt'), d/'labels'/p.stem+'.txt')
 YAML = '/kaggle/working/valorant.yaml'
 open(YAML,'w').write(f'''path: {WORK}
-train: train
-val: val
+train: train/images
+val: val/images
 nc: 2
 names: [Body, Head]
 ''')
