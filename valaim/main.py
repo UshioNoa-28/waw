@@ -339,6 +339,27 @@ def calibrate_counts_per_px(capture: ScreenCapture, _status) -> float | None:
     return probe / px
 
 
+def _new_capture(cfg: AimConfig):
+    base = ScreenCapture(
+        monitor=cfg.monitor,
+        mode=cfg.capture_mode,
+        crop_size=cfg.crop_size,
+        anchor=cfg.capture_anchor,
+    )
+    if cfg.capture_backend in ("auto", "dxcam"):
+        try:
+            from .capture import DxcamCapture
+
+            dup = DxcamCapture(base)
+            dup.grab()
+            print("[capture] DXGI duplication ON (dxcam)")
+            return dup
+        except Exception as exc:
+            if cfg.capture_backend == "dxcam":
+                print(f"[capture] dxcam unavailable ({exc}); using mss")
+    return base
+
+
 def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     import cv2
 
