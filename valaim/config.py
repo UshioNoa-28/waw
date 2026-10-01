@@ -27,7 +27,7 @@ class AimConfig:
     head_bias: float = 0.55
     head_boost: float = 0.35
     min_move: int = 2
-    move_fraction: float = 0.5
+    move_fraction: float = 0.7
     max_step: int = 250
     aim_lead: float = 0.0
     aim_floor: float = 2.0
