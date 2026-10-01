@@ -16,6 +16,8 @@ class AimConfig:
     monitor: int = 0
 
     conf_threshold: float = 0.5
+    team_guard: bool = False
+    red_min_px: int = 6
     min_head_px: float = 16.0  # ignore targets whose head box is smaller (far = fake-prone)
     iou_threshold: float = 0.45
     target_classes: tuple[str, ...] = field(default_factory=tuple)
