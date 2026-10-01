@@ -47,7 +47,7 @@ class AimConfig:
     start_delay: float = 3.0
     dump_dir: str = ""
     aim_comp: int = 4
-    async_pipeline: bool = True   # capture+inference in a worker thread, 60Hz decisions on fresh frames only
+    async_pipeline: bool = False  # measured SLOWER (GIL contention, no GPU gain); kept as --async experiment flag
     latch_throttle: bool = True   # half-rate detection while nailed down
     burst: bool = True
     burst_cooldown: float = 0.28
