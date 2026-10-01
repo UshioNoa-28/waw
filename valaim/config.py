@@ -7,7 +7,7 @@ class AimConfig:
     model_info: str | None = None
     backend: str = "auto"
     device_id: int = 0
-    imgsz: int = 640
+    imgsz: int = 320
 
     capture_mode: str = "center"
     capture_anchor: str = "crosshair"
@@ -59,7 +59,7 @@ class AimConfig:
     head_offset_y: float = 0.0
     aim_gain: float = 0.0
     calibrate: bool = False
-    sens: float = 0.0
+    sens: float = 0.6
     calib_file: str = ""
 
     keybind: str = ""

@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--settle-frac", type=float, default=1.6, help="Settle threshold as multiple of head-box width")
     p.add_argument("--aim-gain", type=float, default=0.0,
                    help="Mouse counts per screen pixel (0 = auto from calib file / --sens)")
-    p.add_argument("--sens", type=float, default=0.0,
+    p.add_argument("--sens", type=float, default=0.6,
                    help="In-game sensitivity; compute gain from the Valorant formula (0 = use calib file)")
     p.add_argument("--calib-file", default="", help="Calibration json path (default valaim_calib.json)")
     p.add_argument("--calibrate", action="store_true", help="Runtime probe calibration (last resort)")

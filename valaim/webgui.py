@@ -81,7 +81,7 @@ def save_config(cfg: AimConfig) -> None:
 
 
 NUMERIC = {
-    "fov_radius": int, "conf_threshold": float, "iou_threshold": float,
+    "fov_radius": int, "conf_threshold": float, "iou_threshold": float, "imgsz": int,
     "head_bias": float, "head_offset_y": float,
     "move_fraction": float, "max_step": int, "smoothing": float,
     "deadzone": float, "aim_dz_frac": float, "fps": int, "trigger_radius": int, "aim_gain": float,
@@ -240,6 +240,7 @@ button:disabled{opacity:.4;cursor:default}
 
 <div class="card"><h2>检测</h2>
 <div class="row"><label>目标类别(空格分隔)</label><input type=text id="classes" size=18></div>
+<div class="row"><label>推理分辨率(320快/640远点准)</label><input type=range id="imgsz" min=160 max=640 step=160><span class=val id="imgsz_v"></span></div>
 <div class="row"><label>视野半径 FOV(px)</label><input type=range id="fov_radius" min=20 max=500 step=5><span class=val id="fov_radius_v"></span></div>
 <div class="row"><label>置信度阈值</label><input type=range id="conf_threshold" min=0.05 max=0.95 step=0.01><span class=val id="conf_threshold_v"></span></div>
 </div>
@@ -281,8 +282,8 @@ button:disabled{opacity:.4;cursor:default}
 <div id="status">加载中...</div>
 
 <script>
-const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_dz_frac","aim_gain","aim_lead","aim_comp","aim_cw","aim_floor","fire_radius","fps","burst_cooldown","burst_gain","settle_ms","settle_frac","arrive_px","resume_px"];
-const DEC={burst_cooldown:2,burst_gain:2,settle_ms:0,settle_frac:1,arrive_px:0,resume_px:0,head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,aim_comp:0,aim_cw:2,aim_floor:1,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,aim_dz_frac:2,fps:0,head_offset_y:0};
+const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_dz_frac","aim_gain","aim_lead","aim_comp","aim_cw","aim_floor","fire_radius","fps","burst_cooldown","burst_gain","settle_ms","settle_frac","arrive_px","resume_px","imgsz"];
+const DEC={imgsz:0,burst_cooldown:2,burst_gain:2,settle_ms:0,settle_frac:1,arrive_px:0,resume_px:0,head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,aim_comp:0,aim_cw:2,aim_floor:1,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,aim_dz_frac:2,fps:0,head_offset_y:0};
 function fill(s){
   const act=document.activeElement;
   for(const id of ["bt_host","bt_port","classes"]){
