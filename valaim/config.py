@@ -3,11 +3,11 @@ from dataclasses import dataclass, field
 
 @dataclass
 class AimConfig:
-    model_path: str = "models/valorant_v26s/model.onnx"
+    model_path: str = "models/valorant_v26s/model_fp16.onnx"
     model_info: str | None = None
     backend: str = "auto"
     device_id: int = 0
-    imgsz: int = 320
+    imgsz: int = 448
 
     capture_mode: str = "center"
     capture_backend: str = "auto"   # auto|dxcam|dxcam-old|mss
@@ -15,8 +15,8 @@ class AimConfig:
     crop_size: int = 640
     monitor: int = 0
 
-    conf_threshold: float = 0.45
-    min_head_px: float = 14.0  # ignore targets whose head box is smaller (far = fake-prone)
+    conf_threshold: float = 0.5
+    min_head_px: float = 16.0  # ignore targets whose head box is smaller (far = fake-prone)
     iou_threshold: float = 0.45
     target_classes: tuple[str, ...] = field(default_factory=tuple)
     exclude_classes: tuple[str, ...] = field(default_factory=tuple)
@@ -34,7 +34,7 @@ class AimConfig:
     aim_lead: float = 0.0
     aim_floor: float = 2.0
     arrive_px: float = 8.0
-    resume_px: float = 32.0   # > measured spike p50*2: spikes must not unlatch
+    resume_px: float = 40.0   # > measured spike p50*2: spikes must not unlatch
     med_win: int = 1          # 1 = median off
     humanize: bool = False
     react_min: float = 120.0

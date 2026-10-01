@@ -29,7 +29,7 @@ from .resources import resolve_model_path
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="External Valorant aimbot")
-    p.add_argument("--model", default="models/valorant_v26s/model.onnx")
+    p.add_argument("--model", default="models/valorant_v26s/model_fp16.onnx")
     p.add_argument("--model-info", default=None)
     p.add_argument("--backend", default="auto", choices=["auto", "cuda", "tensorrt", "amd", "directml", "cpu"])
     p.add_argument("--device-id", type=int, default=0)
@@ -130,7 +130,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         capture_anchor=args.capture_anchor,
         crop_size=args.crop,
         monitor=args.monitor,
-        conf_threshold=args.conf,
+        conf_threshold=args.conf if args.conf != 0.3 else 0.5,
         min_head_px=args.min_head,
         iou_threshold=args.iou,
         target_classes=tuple(args.classes),
