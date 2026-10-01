@@ -204,9 +204,21 @@ class AimEngine:
                     self._bacc.pop(0)
             self._bpx = (dx, dy)
 
+            # Landing = big progress-vs-fire-point AND the frame is otherwise
+            # CALM. Without the calm clause, the user's own flick (screen
+            # jumping 60-200px/frame) fakes a "landing" and the engine fires
+            # mid-swing at whatever the crosshair sweeps past (measured: 71%
+            # of strokes in one live session).
+            thr = p.settle_px
+            if p.settle_frac > 0 and box_w > 0:
+                thr = max(15.0, p.settle_frac * box_w)
+            settled = True if self._lock_at is None else (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < thr)
+            if not settled:
+                self._bacc = []
             landed = False
             if p.burst_early and self._bref is not None and self._bexp > 25.0 \
                     and nowb - self._burst_t >= 0.025 \
+                    and obs_moved < thr \
                     and math.hypot(dx - self._bref[0], dy - self._bref[1]) >= 0.45 * self._bexp:
                 landed = True          # previous stroke visibly arrived
 
@@ -215,13 +227,6 @@ class AimEngine:
             if self._last_obs is not None:
                 obs_moved = math.hypot(dx - self._last_obs[0], dy - self._last_obs[1])
             self._last_obs = (dx, dy)
-            # Stability gate: a mid-flick re-lock (crosshair sweeping past an
-            # enemy) churns within a couple frames; a real acquire settles.
-            # Fire (and even collect aim frames) only after the hand lands.
-            thr = p.settle_px
-            if p.settle_frac > 0 and box_w > 0:
-                thr = max(15.0, p.settle_frac * box_w)
-            settled = True if self._lock_at is None else (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < thr)
             if not settled:
                 self._bacc = []
             if landed or distb > dz:
