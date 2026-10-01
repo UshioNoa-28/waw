@@ -20,6 +20,11 @@ class TargetSelector:
         self.locked: Target | None = None
 
     def _allowed(self, det: Detection) -> bool:
+        mh = getattr(self.cfg, "min_head_px", 0.0)
+        if mh > 0:
+            est_head_w = det.w if self._is_head(det) else det.w * 0.45
+            if est_head_w < mh:
+                return False
         name = det.name.lower()
         if self.cfg.target_classes and name not in {c.lower() for c in self.cfg.target_classes}:
             return False

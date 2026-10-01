@@ -14,7 +14,8 @@ class AimConfig:
     crop_size: int = 640
     monitor: int = 0
 
-    conf_threshold: float = 0.35
+    conf_threshold: float = 0.45
+    min_head_px: float = 14.0  # ignore targets whose head box is smaller (far = fake-prone)
     iou_threshold: float = 0.45
     target_classes: tuple[str, ...] = field(default_factory=tuple)
     exclude_classes: tuple[str, ...] = field(default_factory=tuple)

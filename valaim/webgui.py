@@ -81,7 +81,7 @@ def save_config(cfg: AimConfig) -> None:
 
 
 NUMERIC = {
-    "fov_radius": int, "conf_threshold": float, "iou_threshold": float, "imgsz": int, "crop_size": int,
+    "fov_radius": int, "conf_threshold": float, "iou_threshold": float, "imgsz": int, "crop_size": int, "min_head_px": float,
     "head_bias": float, "head_offset_y": float,
     "move_fraction": float, "max_step": int, "smoothing": float,
     "deadzone": float, "aim_dz_frac": float, "fps": int, "trigger_radius": int, "aim_gain": float,
@@ -146,6 +146,11 @@ class Panel:
         if not os.path.exists(path):
             return f"模型文件不存在: {self.cfg.model_path}"
         self.cfg.model_path = path
+        if not self.cfg.log_aim:
+            self.cfg.log_aim = True
+            if not self.cfg.trace_path:
+                base = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd()
+                self.cfg.trace_path = os.path.join(base, "panel_trace.csv")
         self.stop_flag.clear()
         self.running = True
         self.status = "启动中..."
@@ -245,6 +250,7 @@ button:disabled{opacity:.4;cursor:default}
 <div class="hint">加大截屏范围请同时把推理分辨率拉到 640,否则远处小头会检不出。1600=竖向全屏。</div>
 <div class="row"><label>视野半径 FOV(px)</label><input type=range id="fov_radius" min=20 max=1400 step=20><span class=val id="fov_radius_v"></span></div>
 <div class="row"><label>置信度阈值</label><input type=range id="conf_threshold" min=0.05 max=0.95 step=0.01><span class=val id="conf_threshold_v"></span></div>
+<div class="row"><label>最小头框宽度(px,0=关)</label><input type=range id="min_head_px" min=0 max=40 step=1><span class=val id="min_head_px_v"></span></div>
 </div>
 
 <div class="card"><h2>移动手感</h2>
@@ -285,8 +291,8 @@ button:disabled{opacity:.4;cursor:default}
 <div id="status">加载中...</div>
 
 <script>
-const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_dz_frac","aim_gain","aim_lead","aim_comp","aim_cw","aim_floor","fire_radius","fps","burst_cooldown","burst_gain","settle_ms","settle_frac","arrive_px","resume_px","imgsz","crop_size"];
-const DEC={imgsz:0,crop_size:0,burst_cooldown:2,burst_gain:2,settle_ms:0,settle_frac:1,arrive_px:0,resume_px:0,head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,aim_comp:0,aim_cw:2,aim_floor:1,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,aim_dz_frac:2,fps:0,head_offset_y:0};
+const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_dz_frac","aim_gain","aim_lead","aim_comp","aim_cw","aim_floor","fire_radius","fps","burst_cooldown","burst_gain","settle_ms","settle_frac","arrive_px","resume_px","imgsz","crop_size","min_head_px"];
+const DEC={imgsz:0,crop_size:0,min_head_px:0,burst_cooldown:2,burst_gain:2,settle_ms:0,settle_frac:1,arrive_px:0,resume_px:0,head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,aim_comp:0,aim_cw:2,aim_floor:1,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,aim_dz_frac:2,fps:0,head_offset_y:0};
 function fill(s){
   const act=document.activeElement;
   for(const id of ["bt_host","bt_port","classes"]){

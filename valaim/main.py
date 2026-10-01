@@ -37,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--capture-anchor", default="crosshair", choices=["crosshair", "cursor"])
     p.add_argument("--crop", type=int, default=640)
     p.add_argument("--monitor", type=int, default=0)
+    p.add_argument("--min-head", type=float, default=14.0, help="Ignore targets with head-box narrower than this (px)")
     p.add_argument("--conf", type=float, default=0.35)
     p.add_argument("--iou", type=float, default=0.45)
     p.add_argument("--classes", nargs="*", default=[])
@@ -123,6 +124,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         crop_size=args.crop,
         monitor=args.monitor,
         conf_threshold=args.conf,
+        min_head_px=args.min_head,
         iou_threshold=args.iou,
         target_classes=tuple(args.classes),
         exclude_classes=tuple(args.exclude_classes),
