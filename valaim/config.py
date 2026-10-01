@@ -19,7 +19,7 @@ class AimConfig:
     target_classes: tuple[str, ...] = field(default_factory=tuple)
     exclude_classes: tuple[str, ...] = field(default_factory=tuple)
 
-    fov_radius: int = 160
+    fov_radius: int = 300
     aim_mode: str = "head"
     aim_height: float = 0.30
     head_height: float = 0.10

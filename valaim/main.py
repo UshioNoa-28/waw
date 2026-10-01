@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--iou", type=float, default=0.45)
     p.add_argument("--classes", nargs="*", default=[])
     p.add_argument("--exclude-classes", nargs="*", default=[])
-    p.add_argument("--fov", type=int, default=160)
+    p.add_argument("--fov", type=int, default=300)
     p.add_argument("--aim-height", type=float, default=0.30)
     p.add_argument("--aim-mode", default="head", choices=["head", "head_wide", "body"])
     p.add_argument("--head-height", type=float, default=0.10)
