@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--head-offset-y", type=float, default=0.0,
                    help="Extra downward aim offset in capture pixels (use if it aims too high)")
     p.add_argument("--move-fraction", type=float, default=0.7)
-    p.add_argument("--max-step", type=int, default=250, help="Max counts moved per frame (slew limit)")
+    p.add_argument("--max-step", type=int, default=500, help="Max counts moved per frame (slew limit)")
     p.add_argument("--aim-lead", type=float, default=0.0,
                    help="Target-motion prediction in seconds (covers actuation latency)")
     p.add_argument("--smoothing", type=float, default=0.55,
