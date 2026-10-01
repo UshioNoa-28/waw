@@ -4,16 +4,23 @@ from .input_ctrl import get_cursor_pos
 
 
 class DxcamCapture:
-    """Drop-in for ScreenCapture using DXGI desktop duplication (1-4ms/frame
-    vs mss ~6-12ms). Falls back is handled by the caller: if dxcam cannot be
-    imported or created, ScreenCapture stays in charge."""
+    """DXGI desktop duplication capture of a FIXED region (2-4ms/frame vs
+    mss ~8-16ms on this class of laptop). Re-creates the duplication if the
+    region or crop size changes (panel hot-edits)."""
 
     def __init__(self, base):
         import dxcam
 
         self._base = base
-        self._cam = dxcam.create(color_mode="BGR")
-        self._dup = self._cam  # duplication keeps running; grab() pulls one frame
+        self._cam = None
+        self._open()
+
+    def _open(self) -> None:
+        import dxcam
+
+        x, y, w, h = self._base.region()
+        self._key = (x, y, w, h)
+        self._cam = dxcam.create(output_color="BGR", region=(x, y, x + w, y + h))
 
     def region(self):
         return self._base.region()
@@ -21,6 +28,7 @@ class DxcamCapture:
     def crosshair(self):
         return self._base.crosshair()
 
+    @property
     def monitor(self):
         return self._base.monitor
 
@@ -38,10 +46,17 @@ class DxcamCapture:
 
     def grab(self):
         x, y, w, h = self._base.region()
-        frame = self._dup.grab()
-        while frame is None:
-            frame = self._dup.grab()
-        return frame[y:y + h, x:x + w, :3].copy(), x, y, w, h
+        if (x, y, w, h) != self._key:
+            self._cam.release()
+            self._open()
+        frame = self._cam.grab()
+        tries = 0
+        while frame is None and tries < 20:
+            frame = self._cam.grab()
+            tries += 1
+        if frame is None:
+            raise TimeoutError("duplication returned no frame")
+        return frame[:, :, :3], x, y, w, h
 
 
 class ScreenCapture:

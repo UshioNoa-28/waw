@@ -357,8 +357,7 @@ def _new_capture(cfg: AimConfig):
             print("[capture] DXGI duplication ON (dxcam)")
             return dup
         except Exception as exc:
-            if cfg.capture_backend == "dxcam":
-                print(f"[capture] dxcam unavailable ({exc}); using mss")
+            print(f"[capture] dxcam unavailable ({exc.__class__.__name__}: {exc}); using mss")
     return base
 
 
