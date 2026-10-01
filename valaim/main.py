@@ -60,6 +60,7 @@ def parse_args() -> argparse.Namespace:
                    help="Error smoothing 0..1 (lower = steadier, more lag)")
     p.add_argument("--deadzone", type=float, default=4.0, help="Fixed stop radius in pixels (used when --dz-frac 0)")
     p.add_argument("--dz-frac", type=float, default=0.25, help="Deadzone as fraction of head-box width (0=fixed --deadzone)")
+    p.add_argument("--no-async", dest="async_pipeline", action="store_false", help="Disable async perception pipeline (serial capture->infer->aim)")
     p.add_argument("--no-latch-throttle", dest="latch_throttle", action="store_false", help="Disable half-rate detection while latched")
     p.add_argument("--no-burst", dest="burst", action="store_false", help="Disable one-stroke burst mode (revert to per-frame loop)")
     p.add_argument("--burst-cooldown", type=float, default=0.28, help="Silence after a burst stroke (s)")
@@ -144,6 +145,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         deadzone=args.deadzone,
         aim_dz_frac=args.dz_frac,
         latch_throttle=args.latch_throttle,
+        async_pipeline=args.async_pipeline,
         burst=args.burst,
         burst_cooldown=args.burst_cooldown,
         burst_gain=args.burst_gain,
@@ -362,6 +364,25 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         crop_size=cfg.crop_size,
         anchor=cfg.capture_anchor,
     )
+    perceptor = None
+    if cfg.async_pipeline:
+        from .perceptor import Perceptor
+
+        def _cap_factory():
+            return ScreenCapture(
+                monitor=cfg.monitor,
+                mode=cfg.capture_mode,
+                crop_size=cfg.crop_size,
+                anchor=cfg.capture_anchor,
+            )
+
+        _pr = Perceptor(_cap_factory, detector)
+        if _pr.start():
+            perceptor = _pr
+            print("[perf] async pipeline ON (worker: capture+inference @ max rate)")
+        else:
+            print("[perf] async worker failed to start; serial fallback")
+
     selector = TargetSelector(cfg)
     engine = AimEngine(
         AimParams(
@@ -512,24 +533,36 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.min_speed = cfg.aim_floor
         engine.p.comp_frames = cfg.aim_comp
         engine.p.comp_weight = max(0.0, min(1.0, cfg.aim_cw))
+        if perceptor is not None:
+            snap = perceptor.pop_new(0.1)
+            if snap is None:
+                fl0 = bt_lock_events()
+                if fl0:
+                    lock_on = not lock_on
+                time.sleep(0.002)
+                continue
+            img, crop_x, crop_y, crop_w, crop_h = snap.img, snap.crop_x, snap.crop_y, snap.crop_w, snap.crop_h
+            detections, cursor = snap.detections, snap.cursor
+            tick += 1
+        else:
+            if cfg.latch_throttle and engine.is_latched and det_cache is not None and (tick % 2 == 0):
+                img, crop_x, crop_y, crop_w, crop_h, detections = det_cache
+            else:
+                img, crop_x, crop_y, crop_w, crop_h = capture.grab()
+                detections = detector.detect(img, crop_x, crop_y)
+                det_cache = (img, crop_x, crop_y, crop_w, crop_h, detections)
+            tick += 1
+            cursor = capture.crosshair()
         if cfg.dump_dir and time.monotonic() - _dump_t >= _dump_next:
             _dump_t = time.monotonic()
             _dump_next = random.uniform(0.4, 1.2)
             try:
                 os.makedirs(cfg.dump_dir, exist_ok=True)
-                _fp = os.path.join(cfg.dump_dir, f"f{int(time.time()*10):d}_{len(os.listdir(cfg.dump_dir)):05d}.jpg")
                 import cv2 as _cv
+                _fp = os.path.join(cfg.dump_dir, f"f{int(time.time() * 10)}_{tick:05d}.jpg")
                 _cv.imwrite(_fp, img, [_cv.IMWRITE_JPEG_QUALITY, 92])
             except OSError:
                 pass
-        if cfg.latch_throttle and engine.is_latched and det_cache is not None and (tick % 2 == 0):
-            img, crop_x, crop_y, crop_w, crop_h, detections = det_cache
-        else:
-            img, crop_x, crop_y, crop_w, crop_h = capture.grab()
-            detections = detector.detect(img, crop_x, crop_y)
-            det_cache = (img, crop_x, crop_y, crop_w, crop_h, detections)
-        tick += 1
-        cursor = capture.crosshair()
         # Trigger selection. fire_button mode: aim while the button is held and
         # the virtual left click is emitted once locked.
         if cfg.fire_button:
