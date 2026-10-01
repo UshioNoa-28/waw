@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--crop", type=int, default=640)
     p.add_argument("--monitor", type=int, default=0)
     p.add_argument("--min-head", type=float, default=14.0, help="Ignore targets with head-box narrower than this (px)")
-    p.add_argument("--conf", type=float, default=0.35)
+    p.add_argument("--conf", type=float, default=0.5)
     p.add_argument("--iou", type=float, default=0.45)
     p.add_argument("--classes", nargs="*", default=[])
     p.add_argument("--exclude-classes", nargs="*", default=[])
@@ -130,7 +130,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         capture_anchor=args.capture_anchor,
         crop_size=args.crop,
         monitor=args.monitor,
-        conf_threshold=args.conf if args.conf != 0.3 else 0.5,
+        conf_threshold=args.conf,
         min_head_px=args.min_head,
         iou_threshold=args.iou,
         target_classes=tuple(args.classes),
