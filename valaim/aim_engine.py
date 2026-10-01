@@ -238,6 +238,9 @@ class AimEngine:
                         self._land_armed = True
 
             distb = math.hypot(self._sx, self._sy)
+            self._gate_dbg = (distb, 1.0 if settled else 0.0,
+                              max(0.0, p.burst_cooldown - (nowb - self._burst_t)),
+                              1.0 if landed else 0.0)
             if landed or distb > dz:
                 if not landed and not settled:
                     return 0, 0

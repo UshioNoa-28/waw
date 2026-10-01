@@ -611,6 +611,20 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             active = False
             gate_note = "锁定OFF - 手机按[锁定]恢复"
         target = selector.select(detections, cursor) if active else None
+        if trace is not None:
+            _nh = sum(1 for d in detections if "head" in d.name.lower())
+            _nb = sum(1 for d in detections if "body" in d.name.lower())
+            trace.writerow(["cover", round(time.monotonic() - t0, 4), len(detections), _nh, _nb,
+                            1 if target else 0])
+            if target is None:
+                _best = None
+                for d in detections:
+                    if "head" not in d.name.lower():
+                        continue
+                    _dd = math.hypot(d.x + d.w / 2 - cursor[0], d.y + d.h * 0.55 - cursor[1])
+                    if _best is None or _dd < _best:
+                        _best = _dd
+                trace.writerow(["nearest", round(time.monotonic() - t0, 4), round(_best or -1, 1)])
         dist = None
         action = ""
 
@@ -646,6 +660,9 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             if dist > cfg.min_move or trace is not None:
                 dw = target.det.w * (1.0 if "head" in target.det.name.lower() else 0.45)
                 mx, my = engine.step(dx, dy, lx, ly, dw) if dist > cfg.min_move else (0, 0)
+                _gd = getattr(engine, "_gate_dbg", None)
+                if _gd is not None:
+                    trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3])
                 if cfg.aim_off:
                     mx = my = 0
                 if trace is not None:
@@ -653,6 +670,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                     trace.writerow(["err", tt, round(dx, 2), round(dy, 2)])
                     if grab_ms or infer_ms:
                         trace.writerow(["timing", tt, round(grab_ms, 1), round(infer_ms, 1)])
+                    if _gd is not None:
+                        trace.writerow(["gate", trace_g[0], trace_g[1], trace_g[2], trace_g[3], trace_g[4]])
                     dbg = getattr(engine, "_dbg", None)
                     if dbg:
                         trace.writerow(["dbg", tt, round(dbg[0], 1), round(dbg[2], 1),
