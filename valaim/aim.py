@@ -17,6 +17,7 @@ class Target:
 class TargetSelector:
     def __init__(self, cfg: AimConfig):
         self.cfg = cfg
+        self.locked: Target | None = None
 
     def _allowed(self, det: Detection) -> bool:
         name = det.name.lower()
@@ -45,6 +46,29 @@ class TargetSelector:
     def select(self, detections: list[Detection], cursor: tuple[int, int]) -> Target | None:
         best: Target | None = None
 
+        # sticky lock: keep chasing the box we locked onto (within 45px of its
+        # last aim point) while it is still detected. Without this, a row of
+        # range dummies hands the lock to the nearest neighbour mid-flick and
+        # the stroke reverses ("round-trip" seen in real13/real15/real17).
+        keep = self.locked
+        if keep is not None:
+            match: Detection | None = None
+            for det in detections:
+                if not self._allowed(det):
+                    continue
+                x, y = self._aim_point(det)
+                if math.hypot(x - keep.x, y - keep.y) < 45.0:
+                    match = det
+                    keep = Target(det=det, x=x, y=y,
+                                  distance=math.hypot(x - cursor[0], y - cursor[1]),
+                                  score=99.0)
+                    break
+            if match is None:
+                self.locked = None
+            else:
+                self.locked = keep
+                return keep
+
         for det in detections:
             if not self._allowed(det):
                 continue
@@ -62,6 +86,7 @@ class TargetSelector:
             if best is None or score > best.score:
                 best = Target(det=det, x=x, y=y, distance=distance, score=score)
 
+        self.locked = best
         return best
 
     def explain(self, detections: list[Detection], cursor: tuple[int, int]) -> str:
