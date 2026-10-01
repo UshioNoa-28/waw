@@ -13,6 +13,7 @@ class DxcamCapture:
 
         self._base = base
         self._cam = None
+        self._dead = False
         self._open()
 
     def _open(self) -> None:
@@ -46,17 +47,30 @@ class DxcamCapture:
 
     def grab(self):
         x, y, w, h = self._base.region()
-        if (x, y, w, h) != self._key:
-            self._cam.release()
-            self._open()
-        frame = self._cam.grab()
-        tries = 0
-        while frame is None and tries < 20:
+        if self._dead:
+            return self._base.grab()
+        try:
+            if (x, y, w, h) != self._key:
+                self._cam.release()
+                self._open()
             frame = self._cam.grab()
-            tries += 1
-        if frame is None:
-            raise TimeoutError("duplication returned no frame")
-        return frame[:, :, :3], x, y, w, h
+            tries = 0
+            while frame is None and tries < 10:
+                frame = self._cam.grab()
+                tries += 1
+            if frame is None:
+                raise TimeoutError("no frame")
+            return frame[:, :, :3], x, y, w, h
+        except Exception as exc:
+            # exclusive-fullscreen games kill duplication; never let the aim
+            # loop die over a capture optimization -> permanent mss downgrade
+            self._dead = True
+            try:
+                self._cam.release()
+            except Exception:
+                pass
+            print(f"[capture] duplication lost ({exc.__class__.__name__}); downgraded to mss for this session")
+            return self._base.grab()
 
 
 class ScreenCapture:
