@@ -48,6 +48,7 @@ class AimConfig:
     burst: bool = True
     burst_cooldown: float = 0.28
     burst_gain: float = 1.0
+    burst_min_px: float = 70.0
     aim_cw: float = 1.0
     smoothing: float = 0.55
     deadzone: float = 4.0

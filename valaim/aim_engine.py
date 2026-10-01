@@ -37,6 +37,7 @@ class AimParams:
     burst: bool = False           # one full stroke per observation, then silence
     burst_cooldown: float = 0.15  # s of enforced silence after a burst (>actuation lag)
     burst_gain: float = 1.0       # fraction of error covered by the single stroke
+    burst_min_px: float = 0.0     # ignore strokes below this error (skip re-lock churn flicks)
     burst_early: bool = True      # fire the next stroke as soon as the last one is SEEN to land (instead of waiting the full cooldown)
     arrive_px: float = 8.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 32.0       # ...and only resume past this (above spike band)
@@ -202,6 +203,9 @@ class AimEngine:
                 landed = True          # previous stroke visibly arrived
 
             distb = math.hypot(self._sx, self._sy)
+            if landed or distb > dz:
+                if p.burst_min_px and distb < p.burst_min_px:
+                    return 0, 0
             sx = sy = 0.0
             if landed:
                 sx, sy = dx, dy        # aim at the fresh landed observation
