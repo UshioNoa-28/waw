@@ -1,0 +1,9 @@
+teacher@640...
+Loading /home/anna/code/projects/val/models/valorant_yolo11m/model.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.30.0 with CPUExecutionProvider
+Loading /home/anna/code/projects/val/models/valorant_v26s/model.onnx for ONNX Runtime inference...
+Using ONNX Runtime 1.30.0 with CPUExecutionProvider
+student@512: 召回71% 误检34% (教师框73)
+student@384: 召回62% 误检42% (教师框73)
+student@320: 召回59% 误检42% (教师框73)
+RES DONE

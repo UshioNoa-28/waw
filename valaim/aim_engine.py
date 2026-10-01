@@ -85,6 +85,7 @@ class AimEngine:
         self._last_obs: tuple | None = None
         self._land_armed = False
         self._bu = (1.0, 0.0)
+        self._bcam = [0.0, 0.0]
         self._bexp = 0.0      # expected px drop of the in-flight stroke
         self._bref = None     # observation at fire time (for landing detection)
         self._bpx = None   # previous raw observation (spike clamp ref)
@@ -133,7 +134,7 @@ class AimEngine:
 
     def step(self, dx: float, dy: float,
              lead_x: float = 0.0, lead_y: float = 0.0,
-             box_w: float = 0.0) -> tuple[int, int]:
+             box_w: float = 0.0, cam=(0.0, 0.0)) -> tuple[int, int]:
         """Return a relative mouse step for the current pixel error.
 
         lead_x/lead_y are caller-computed target-motion predictions (px); they
@@ -207,9 +208,15 @@ class AimEngine:
             self._bpx = (dx, dy)
 
             # frame-to-frame motion of the raw observation (user flick vs calm)
+            self._bcam[0] += cam[0]; self._bcam[1] += cam[1]
             obs_moved = 0.0
             if self._last_obs is not None:
-                obs_moved = math.hypot(dx - self._last_obs[0], dy - self._last_obs[1])
+                # subtract the camera-motion component: the player turning the
+                # view shifts EVERY box on screen; that must not count as
+                # "target moving" (live tests: gate opened on only 33% of
+                # frames because self-motion was treated as churn)
+                obs_moved = math.hypot(dx - self._last_obs[0] - cam[0],
+                                       dy - self._last_obs[1] - cam[1])
             self._last_obs = (dx, dy)
 
             # Stability gate: fire (and collect aim frames) only when the lock
@@ -233,7 +240,10 @@ class AimEngine:
                     landed = True
                     self._land_armed = False
                 else:
-                    px_ = -(dx - self._bref[0]) * self._bu[0] - (dy - self._bref[1]) * self._bu[1]
+                    # progress must also discount camera travel since the shot
+                    rx = dx - self._bref[0] - (self._bcam[0] - getattr(self, "_b0", (0.0, 0.0))[0])
+                    ry = dy - self._bref[1] - (self._bcam[1] - getattr(self, "_b0", (0.0, 0.0))[1])
+                    px_ = -(rx * self._bu[0] + ry * self._bu[1])
                     if px_ >= 0.45 * self._bexp:
                         self._land_armed = True
 
@@ -273,6 +283,7 @@ class AimEngine:
             if ix or iy:
                 self._burst_t = nowb
                 self._bref = (sx, sy)
+                self._b0 = (self._bcam[0], self._bcam[1])
                 self._bexp = math.hypot(ix, iy) / cp0
                 mb = math.hypot(ix, iy) or 1.0
                 self._bu = (ix / mb, iy / mb)

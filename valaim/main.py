@@ -500,6 +500,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     tick = 0
     det_cache = None
     grab_ms = infer_ms = 0.0
+    _prev_heads: list = []   # camera-motion estimation from common box shift
     _dump_t = 0.0
     _dump_next = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
     trace = None
@@ -659,7 +660,24 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
 
             if dist > cfg.min_move or trace is not None:
                 dw = target.det.w * (1.0 if "head" in target.det.name.lower() else 0.45)
-                mx, my = engine.step(dx, dy, lx, ly, dw) if dist > cfg.min_move else (0, 0)
+                # camera motion: median screen-shift of matched head boxes
+                camx = camy = 0.0
+                cur_h = [(d.x + d.w / 2.0, d.y + d.h * 0.55) for d in detections if "head" in d.name.lower()]
+                if _prev_heads and cur_h:
+                    vecs = []
+                    for (cx_, cy_) in cur_h:
+                        bd = None
+                        for (px_, py_) in _prev_heads:
+                            dd = math.hypot(cx_ - px_, cy_ - py_)
+                            if dd < 45.0 and (bd is None or dd < bd[0]):
+                                bd = (dd, cx_ - px_, cy_ - py_)
+                        if bd:
+                            vecs.append((bd[1], bd[2]))
+                    if len(vecs) >= 2:
+                        camx = sorted(v[0] for v in vecs)[len(vecs) // 2]
+                        camy = sorted(v[1] for v in vecs)[len(vecs) // 2]
+                _prev_heads = cur_h
+                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy)) if dist > cfg.min_move else (0, 0)
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
                     trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3])
