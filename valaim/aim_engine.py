@@ -213,7 +213,7 @@ class AimEngine:
             if self._last_obs is not None:
                 obs_moved = math.hypot(dx - self._last_obs[0], dy - self._last_obs[1])
             self._last_obs = (dx, dy)
-            settled = (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < p.settle_px) if self._lock_at else True
+            settled = True if self._lock_at is None else (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < p.settle_px)
             if landed or distb > dz:
                 if not landed and not settled:
                     return 0, 0
