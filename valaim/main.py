@@ -1,6 +1,7 @@
 import argparse
 import json
 import math
+import random
 import os
 import sys
 import time
@@ -461,7 +462,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     lock_on = True
     tick = 0
     det_cache = None
-    _dump_t = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
+    _dump_t = 0.0
+    _dump_next = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
     trace = None
     trace_f = None
     if cfg.log_aim:
@@ -510,8 +512,9 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         engine.p.min_speed = cfg.aim_floor
         engine.p.comp_frames = cfg.aim_comp
         engine.p.comp_weight = max(0.0, min(1.0, cfg.aim_cw))
-        if cfg.dump_dir and time.monotonic() - _dump_t >= 0.5:
+        if cfg.dump_dir and time.monotonic() - _dump_t >= _dump_next:
             _dump_t = time.monotonic()
+            _dump_next = random.uniform(0.4, 1.2)
             try:
                 os.makedirs(cfg.dump_dir, exist_ok=True)
                 _fp = os.path.join(cfg.dump_dir, f"f{int(time.time()*10):d}_{len(os.listdir(cfg.dump_dir)):05d}.jpg")
