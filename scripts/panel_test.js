@@ -1,109 +1,108 @@
-// jsdom integration test for the ValAim panel capture flow.
+// jsdom integration test for the ValAim control panel (post-cleanup UI).
 const { JSDOM } = require("jsdom");
 const fs = require("fs");
-const path = require("path");
 
-// Extract PAGE html from valaim/webgui.py
-const py = fs.readFileSync(path.join("/home/anna/code/projects/val", "valaim/webgui.py"), "utf8");
+const py = fs.readFileSync("/home/anna/code/projects/val/valaim/webgui.py", "utf8");
 const m = py.match(/PAGE = """([\s\S]*?)"""/);
 if (!m) { console.error("FAIL: PAGE not found in webgui.py"); process.exit(1); }
 const html = m[1];
 
-const sent = [];          // recorded /set payloads
-let state = {             // canned /state responses
-  bt_host: "", bt_port: 47800, target_classes: "Head", keybind: "", fire_button: "",
-  classes: "", trigger: "", sens: 0, aim_gain: 0, aim_lead: 0.1,
-  head_bias: 0.55, head_offset_y: 0, fov_radius: 160, conf_threshold: 0.35,
-  move_fraction: 0.2, max_step: 45, smoothing: 0.6, deadzone: 2, fire_radius: 12, fps: 60,
-  always_on: true, triggerbot: false, debug: false,
-  status: "空闲 - 点启动", running: false, raw_sink: false,
+const sent = [];
+let state = {
+  bt_host: "192.168.1.115", bt_port: 47800, target_classes: "Head", classes: "", sens: 0,
+  aim_gain: 0, aim_lead: 0, head_bias: 0.55, head_offset_y: 0,
+  fov_radius: 300, conf_threshold: 0.3, move_fraction: 0.7, max_step: 500, smoothing: 0.55,
+  deadzone: 4, aim_dz_frac: 0.25, fire_radius: 12, fps: 60, aim_comp: 4, aim_cw: 1, aim_floor: 2,
+  burst: true, burst_cooldown: 0.28, burst_gain: 1.0, settle_ms: 90, settle_frac: 1.6,
+  arrive_px: 8, resume_px: 32,
+  triggerbot: false, debug: false,
+  status: "空闲 - 确认手机 App 已连接后点启动。", running: false, raw_sink: true,
 };
 
 const dom = new JSDOM(html, {
+  url: "http://127.0.0.1:8765/",
   runScripts: "dangerously",
   pretendToBeVisual: true,
   beforeParse(window) {
-    window.fetch = (url, opts) => {
-      if (String(url).startsWith("/set")) {
-        sent.push(JSON.parse(opts.body));
-        return Promise.resolve({ text: () => Promise.resolve("ok"), json: () => Promise.resolve("ok") });
+    window.fetch = (u, o) => {
+      if (String(u).endsWith("/state")) {
+        return Promise.resolve({ json: () => Promise.resolve({ ...state }), text: () => Promise.resolve("ok") });
       }
-      if (String(url).startsWith("/start") || String(url).startsWith("/stop") || String(url).startsWith("/save")) {
-        return Promise.resolve({ text: () => Promise.resolve("ok") });
+      if (String(u).endsWith("/set")) {
+        const p = JSON.parse(o.body);
+        sent.push(p);
+        Object.assign(state, p);
+        return Promise.resolve({ json: () => Promise.resolve(state), text: () => Promise.resolve("ok") });
       }
-      return Promise.resolve({ json: () => Promise.resolve({ ...state }) });
+      return Promise.resolve({ json: () => Promise.resolve(state), text: () => Promise.resolve("saved") });
     };
-    window.alert = () => {};
+    window.navigator.sendBeacon = () => true;
   },
 });
-
 const { window } = dom;
 const { document } = window;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
 let failures = 0;
-function check(name, cond) {
+const check = (name, cond) => {
   console.log((cond ? "PASS " : "FAIL ") + name);
   if (!cond) failures++;
-}
+};
 const last = (k) => [...sent].reverse().find((s) => k in s);
 
 (async () => {
-  await sleep(400); // let poll() run a few cycles
+  await sleep(400);
 
-  // ---- T1: page alive, status rendered ----
-  check("T1 status shows panel text (poll works)", document.getElementById("status").textContent.includes("空闲"));
+  check("T1 poll renders status", document.getElementById("status").textContent.includes("空闲"));
 
-  // ---- T2: fire-key capture starts -> banner visible, message present ----
-  document.getElementById("capBtn").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  // capture machinery fully removed
+  check("T2 no capture UI remains",
+    !document.getElementById("capKey") && !document.getElementById("capBtn")
+    && !document.getElementById("trigger") && !document.getElementById("fire_button")
+    && !document.getElementById("always_on") && !document.getElementById("capbar"));
+
+  // new burst controls exist and get filled from /state
+  for (const id of ["burst", "burst_cooldown", "burst_gain", "settle_ms", "settle_frac", "arrive_px", "resume_px"]) {
+    check(`T3 control ${id} present`, !!document.getElementById(id));
+  }
+  check("T3b burst checkbox reflects state", document.getElementById("burst").checked === true);
+  check("T3c cooldown value filled", document.getElementById("burst_cooldown").value === "0.28");
+  check("T3d max_step slider allows 600", document.getElementById("max_step").max === "600");
+
+  // slider input sends patch
+  const sl = document.getElementById("settle_ms");
+  sl.value = "120";
+  sl.dispatchEvent(new window.Event("input", { bubbles: true }));
   await sleep(50);
-  const capbar = document.getElementById("capbar");
-  check("T2 capture banner visible", capbar.style.display === "block" && capbar.textContent.includes("鼠标键"));
-  check("T2b button shows 采集中", document.getElementById("capBtn").textContent.includes("采集中"));
+  check("T4 settle_ms patch sent", last("settle_ms") && last("settle_ms").settle_ms === "120");
 
-  // ---- T3: poll must NOT clobber the status while capturing ----
-  const stBefore = document.getElementById("status").textContent;
-  await sleep(500); // poll ran >=1 more time
-  check("T3 status untouched during capture", document.getElementById("status").textContent === stBefore);
-
-  // ---- T4: LEFT click during btn-capture -> refused, capture stays active ----
-  let ev = new window.MouseEvent("mousedown", { bubbles: true, cancelable: true });
-  Object.defineProperty(ev, "button", { value: 0 });
-  window.dispatchEvent(ev);
+  // checkbox change sends bool
+  const tb = document.getElementById("triggerbot");
+  tb.checked = true;
+  tb.dispatchEvent(new window.Event("change", { bubbles: true }));
   await sleep(50);
-  check("T4 left refused w/ explanation", capbar.textContent.includes("左键不能"));
-  check("T4b capture still active after refusal", document.getElementById("capBtn").textContent.includes("采集中"));
+  check("T5 triggerbot bool patch sent", last("triggerbot") && last("triggerbot").triggerbot === true);
 
-  // ---- T5: right click binds and sends fire_button=right ----
-  ev = new window.MouseEvent("mousedown", { bubbles: true, cancelable: true });
-  Object.defineProperty(ev, "button", { value: 2 });
-  window.dispatchEvent(ev);
+  // burst toggle
+  const bu = document.getElementById("burst");
+  bu.checked = false;
+  bu.dispatchEvent(new window.Event("change", { bubbles: true }));
   await sleep(50);
-  check("T5 fire_button sent", last("fire_button") && last("fire_button").fire_button === "right");
-  check("T5b input value updated", document.getElementById("fire_button").value === "right");
-  check("T5c banner hidden after success", capbar.style.display === "none");
-  check("T5d button restored", document.getElementById("capBtn").textContent === "采集");
+  check("T6 burst bool patch sent", last("burst") && last("burst").burst === false);
 
-  // ---- T6: key capture F8 ----
-  document.getElementById("capKey").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-  await sleep(30);
-  const kd = new window.KeyboardEvent("keydown", { code: "F8", bubbles: true, cancelable: true });
-  window.dispatchEvent(kd);
-  await sleep(30);
-  check("T6 trigger F8 sent", last("trigger") && last("trigger").trigger === "F8");
+  // text input not clobbered while focused
+  const ip = document.getElementById("bt_host");
+  ip.focus();
+  ip.value = "10.0.0.9";
+  state.bt_host = "192.168.1.115";
+  await sleep(400);
+  check("T7 focused text input not clobbered by poll", ip.value === "10.0.0.9");
 
-  // ---- T7: Esc cancels capture ----
-  document.getElementById("capKey").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-  await sleep(30);
-  window.dispatchEvent(new window.KeyboardEvent("keydown", { code: "Escape", bubbles: true, cancelable: true }));
-  await sleep(30);
-  check("T7 Esc cancels", capbar.style.display === "none" && document.getElementById("capKey").textContent === "采集");
+  // status resumes after blur
+  ip.blur();
+  state.status = "运行中";
+  await sleep(400);
+  check("T8 status updates resume", document.getElementById("status").textContent.includes("运行中"));
 
-  // ---- T8: after capture ended, poll resumes updating status ----
-  state.status = "aim | move +5,+2";
-  await sleep(500);
-  check("T8 status updates resume", document.getElementById("status").textContent.includes("aim"));
-
-  console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURES`);
-  process.exit(failures === 0 ? 0 : 1);
+  console.log(failures ? `\n${failures} FAILURE(S)` : "\nALL PASS");
+  process.exit(failures ? 1 : 0);
 })();

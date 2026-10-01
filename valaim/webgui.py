@@ -133,24 +133,6 @@ class Panel:
                         self.cfg.bt_port = int(value)
                     except ValueError:
                         return "bad port"
-                elif key == "trigger":
-                    self.cfg.keybind = str(value).strip().upper()
-                    self.cfg.hold_button = ""
-                    self.cfg.fire_button = ""
-                elif key == "fire_button":
-                    fb = str(value).strip().lower()
-                    if fb in ("", "none"):
-                        self.cfg.fire_button = ""
-                    elif fb in ("x1", "x2", "middle", "right"):
-                        self.cfg.fire_button = fb
-                        self.cfg.keybind = ""
-                    else:
-                        return "开火键无效(可选: x1 x2 middle right)"
-                elif key == "always_on":
-                    if value:
-                        self.cfg.keybind = ""
-                        self.cfg.hold_button = ""
-                        self.cfg.fire_button = ""
                 elif key in ("debug", "triggerbot", "burst"):
                     setattr(self.cfg, key, bool(value))
             return None
@@ -282,13 +264,11 @@ button:disabled{opacity:.4;cursor:default}
 <div class="row"><label>帧率上限</label><input type=range id="fps" min=30 max=240 step=5><span class=val id="fps_v"></span></div>
 </div>
 
-<div class="card"><h2>触发方式</h2>
-<div class="row"><label>始终开启(不用按键)</label><input type=checkbox id="always_on"><label style="flex:0 0 auto">或按住键</label><input type=text id="trigger" size=10><button id="capKey" style="padding:6px 10px">采集</button></div>
-<div class="row"><label>开火键</label><input type=text id="fire_button" size=10><button id="capBtn" style="padding:6px 10px">采集</button>
-<label style="flex:0 0 auto">锁定半径px</label><input type=range id="fire_radius" min=4 max=60 step=2 style="flex:1"><span class=val id="fire_radius_v"></span></div>
-<div class="hint">开火键模式:按住侧键 → 自动吸附 → 锁定后手机替你按左键开火,松开即停。此时不要用物理左键射击。</div>
-<div class="row"><label>自动开火(需配合始终开启)</label><input type=checkbox id="triggerbot"></div>
+<div class="card"><h2>触发与辅助</h2>
+<div class="row"><label>自动开火(吸上钉住后手机替你按左键)</label><input type=checkbox id="triggerbot"></div>
+<div class="row"><label>开火半径(px)</label><input type=range id="fire_radius" min=4 max=60 step=2 style="flex:1"><span class=val id="fire_radius_v"></span></div>
 <div class="row"><label>显示画面预览(debug 窗口)</label><input type=checkbox id="debug"></div>
+<div class="hint">说明:游戏在前台时 Vanguard 屏蔽一切第三方按键读取,键盘/侧键绑定无效——吸附默认常驻开启,想暂停按手机 App 上的「锁定」按钮。</div>
 </div>
 
 <div class="bar">
@@ -298,71 +278,14 @@ button:disabled{opacity:.4;cursor:default}
 <button id="quit">退出程序</button>
 </div>
 
-<div id="capbar" style="display:none;background:#7c3aed;color:#fff;border-radius:8px;padding:10px 12px;font-size:14px;margin:0 0 10px"></div>
 <div id="status">加载中...</div>
 
 <script>
 const NUM=["head_bias","head_offset_y","fov_radius","conf_threshold","move_fraction","max_step","smoothing","deadzone","aim_dz_frac","aim_gain","aim_lead","aim_comp","aim_cw","aim_floor","fire_radius","fps","burst_cooldown","burst_gain","settle_ms","settle_frac","arrive_px","resume_px"];
 const DEC={burst_cooldown:2,burst_gain:2,settle_ms:0,settle_frac:1,arrive_px:0,resume_px:0,head_bias:2,conf_threshold:2,move_fraction:2,smoothing:2,aim_gain:2,aim_lead:2,aim_comp:0,aim_cw:2,aim_floor:1,fire_radius:0,fov_radius:0,max_step:0,deadzone:1,aim_dz_frac:2,fps:0,head_offset_y:0};
-const KEYMAP={"Space":"SPACE","Tab":"TAB","Enter":"ENTER"};
-function codeToName(code){
-  let m;
-  if(/^Key([A-Z])$/.test(code)) return RegExp.$1;
-  if(/^Digit([0-9])$/.test(code)) return RegExp.$1;
-  if(/^F([1-9]|1[0-2])$/.test(code)) return code;
-  if(code==="ShiftLeft")return"LSHIFT"; if(code==="ShiftRight")return"RSHIFT";
-  if(code==="ControlLeft")return"LCTRL"; if(code==="ControlRight")return"RCTRL";
-  if(code==="AltLeft")return"ALT"; if(code==="AltRight")return"RALT";
-  return KEYMAP[code]||null;
-}
-let captureMode=null;
-const capbar=()=>document.getElementById("capbar");
-function capMsg(t){const b=capbar();b.textContent=t;b.style.display="block";}
-function capEnd(){
-  captureMode=null;
-  capbar().style.display="none";
-  document.getElementById("capKey").textContent="采集";
-  document.getElementById("capBtn").textContent="采集";
-}
-function startCapture(which){
-  captureMode=which;
-  document.getElementById("capKey").textContent = which==="key"?"采集中...":"采集";
-  document.getElementById("capBtn").textContent = which==="btn"?"采集中...":"采集";
-  document.getElementById("trigger").blur();
-  document.getElementById("fire_button").blur();
-  capMsg(which==="key"
-    ? "采集模式:请按下要绑定的键盘键(Esc 取消)。此期间忽略鼠标键。"
-    : "采集模式:请按下要绑定的鼠标键(中键/侧键/右键;左键不行,它是被虚拟点击的键。Esc 取消)");
-}
-document.getElementById("capKey").onclick=()=>startCapture("key");
-document.getElementById("capBtn").onclick=()=>startCapture("btn");
-window.addEventListener("keydown",e=>{
-  if(!captureMode)return;
-  e.preventDefault();
-  if(e.code==="Escape"){capEnd();return;}
-  if(captureMode!=="key"){capMsg("这是鼠标键。键盘采集请点「或按住键」旁的采集。");return;}
-  const n=codeToName(e.code);
-  if(!n){capMsg("该键暂不支持,换字母/数字/F1-F12/空格/Shift/Ctrl/Alt 试试");return;}
-  const el=document.getElementById("trigger"); el.value=n;
-  send({trigger:n});
-  capEnd();
-  document.getElementById("status").textContent="已绑定按住键: "+n;
-},true);
-window.addEventListener("mousedown",e=>{
-  if(!captureMode)return;
-  e.preventDefault();
-  if(captureMode!=="btn"){return;}
-  const names={0:"left",1:"middle",2:"right",3:"x1",4:"x2"};
-  const n=names[e.button]; if(!n)return;
-  if(n==="left"){capMsg("左键不能作为开火键(开火就是虚拟按左键)。请按 中键/侧键/右键,或按 Esc 取消");return;}
-  const el=document.getElementById("fire_button"); el.value=n;
-  send({fire_button:n});
-  capEnd();
-  document.getElementById("status").textContent="已绑定开火键: "+n;
-},true);
 function fill(s){
   const act=document.activeElement;
-  for(const id of ["bt_host","bt_port","classes","trigger","fire_button"]){
+  for(const id of ["bt_host","bt_port","classes"]){
     const el=document.getElementById(id);
     if(el&&el!==act){
       const want=id==="classes"?(s.target_classes||""):String(s[id]??(id==="bt_port"?47800:""));
@@ -370,9 +293,6 @@ function fill(s){
     }
   }
   const sv=document.getElementById("sens"); if(sv&&sv!==act) sv.value=s.sens>0?s.sens:"";
-  const a=document.getElementById("always_on"); if(a&&a!==act) a.checked=!s.keybind&&!s.hold_button&&!s.fire_button;
-  const tk=document.getElementById("trigger"); if(tk&&tk!==act) tk.value=s.keybind||"";
-  const fb=document.getElementById("fire_button"); if(fb&&fb!==act) fb.value=s.fire_button||"";
   const tb=document.getElementById("triggerbot"); if(tb&&tb!==act) tb.checked=!!s.triggerbot;
   const dg=document.getElementById("debug"); if(dg&&dg!==act) dg.checked=!!s.debug;
   const bu=document.getElementById("burst"); if(bu&&bu!==act) bu.checked=!!s.burst;
@@ -381,7 +301,6 @@ function fill(s){
     if(el!==act) el.value=s[k];
     document.getElementById(k+"_v").textContent=(+s[k]).toFixed(DEC[k]??1);
   }
-  if(captureMode){return;}
   const st=document.getElementById("status");
   st.textContent=s.status;
   st.className=s.running?"run":(s.status.startsWith("错误")?"err":"");
@@ -398,12 +317,12 @@ function send(obj){
 }
 function track(id){
   const el=document.getElementById(id);
-  const push=()=>send(id==="always_on"?{always_on:el.checked}:id==="triggerbot"?{triggerbot:el.checked}:id==="debug"?{debug:el.checked}:id==="burst"?{burst:el.checked}:{[id]:el.value});
+  const push=()=>send(id==="triggerbot"?{triggerbot:el.checked}:id==="debug"?{debug:el.checked}:id==="burst"?{burst:el.checked}:{[id]:el.value});
   if(el.type==="checkbox") el.addEventListener("change",push);
   else{ el.addEventListener("input",push); el.addEventListener("change",push); }
 }
 NUM.forEach(track);
-["bt_host","bt_port","classes","trigger","fire_button","sens","always_on","triggerbot","debug","burst"].forEach(track);
+["bt_host","bt_port","classes","sens","triggerbot","debug","burst"].forEach(track);
 function postp(path){return fetch(path,{method:"POST"});}
 document.getElementById("start").onclick=async()=>{
   await send({bt_host:document.getElementById("bt_host").value,bt_port:document.getElementById("bt_port").value});
