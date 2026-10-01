@@ -1,4 +1,4 @@
-# VALORANT 蒸馏 round2.3
+# VALORANT 蒸馏 round2.4
 # ============================================================
 # ## VALORANT 蒸馏: yolo11m 教师 → yolo11n 学生
 # 前置: Kaggle 右侧 Accelerator 选 **GPU T4 x2**, Settings 里 **Internet 打开**。
@@ -132,8 +132,9 @@ m = YOLO(best)
 onnx_p = m.export(format='onnx', imgsz=512, opset=12, dynamic=True, simplify=True)
 import shutil, subprocess
 out = Path('/kaggle/working/val_student'); (out/'models/student').mkdir(parents=True, exist_ok=True)
-shutil.copy(onnx_p, out/'models/valorant_v11n/model.onnx')
-(out/'models/valorant_v11n/model.json').write_text('{"names": {"0": "Body", "1": "Head"}, "imgsz": 512, "dynamic": true}')
+assert onnx_p and os.path.exists(onnx_p), 'no onnx'
+shutil.copy(onnx_p, out/'models/student/model.onnx')
+(out/'models/student/model.json').write_text('{"names": {"0": "Body", "1": "Head"}, "imgsz": 512, "dynamic": true}')
 shutil.copy(best, out/'teacher_free_best.pt')
 subprocess.run(['zip','-rq','val_student.zip','val_student'], cwd='/kaggle/working')
 print('DONE -> 下载 /kaggle/working/val_student.zip, 把 model.onnx 丢给我或放 WSL 仓库 models/ 下')
