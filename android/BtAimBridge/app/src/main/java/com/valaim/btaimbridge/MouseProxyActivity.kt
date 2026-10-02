@@ -40,9 +40,16 @@ class MouseProxyActivity : AppCompatActivity() {
     private var holds = 0
     private var nails = 0
 
+    override fun onUserLeaveHint() { super.onUserLeaveHint() }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        try { out.requestPointerCapture() } catch (_: Exception) { }
+        return super.onTouchEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32) }
+        out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32); isFocusableInTouchMode = true; requestFocus() }
         setContentView(out)
         out.post { try { out.requestPointerCapture() } catch (_: Exception) { } }
         handler.post(tick)
@@ -96,7 +103,7 @@ class MouseProxyActivity : AppCompatActivity() {
 
     private fun render() {
         out.text = buildString {
-            appendLine("鼠标代理运行中")
+            appendLine("鼠标代理运行中   指针捕捉: ${if (captureAlive()) "ON" else "!! OFF - 点一下屏幕 !!"}")
             appendLine("移动转发 $moves 帧 | 扣左键: 钉住放 $nails / 超时放 $holds")
             appendLine("左键状态: ${if (lmbHeld) if (lmbDownSent) "已放行" else "扣住等待钉住…" else "无"}")
             appendLine("PC 钉住信号: ${BridgeGlobals.server?.nailOk}")
@@ -134,7 +141,16 @@ class MouseProxyActivity : AppCompatActivity() {
                             lmbDownSent = false
                             btnMask = btnMask and 1.inv()
                             hid()?.sendReport(btnMask, 0, 0, 0)
-                        } else lmbWantsRelease = true
+                        } else {
+                            // released before the gate opened: it was a quick
+                            // tap - fire it NOW (down, up) instead of eating it
+                            btnMask = btnMask or 0x01
+                            hid()?.sendReport(btnMask, 0, 0, 0)
+                            handler.postDelayed({
+                                btnMask = btnMask and 1.inv()
+                                hid()?.sendReport(btnMask, 0, 0, 0)
+                            }, 14)
+                        }
                     }
                 }
                 if (diff and MotionEvent.BUTTON_SECONDARY != 0) {
