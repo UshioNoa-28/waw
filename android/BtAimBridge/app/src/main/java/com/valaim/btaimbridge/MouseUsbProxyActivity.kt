@@ -64,11 +64,16 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32) }
         setContentView(out)
-        usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-        registerReceiver(permReceiver, IntentFilter(ACTION_PERM))
-        handler.post(flush)
-        render()
-        autoPick()
+        try {
+            usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+            val flags = if (android.os.Build.VERSION.SDK_INT >= 33) Context.RECEIVER_NOT_EXPORTED else 0
+            registerReceiver(permReceiver, IntentFilter(ACTION_PERM), flags)
+            handler.post(flush)
+            render()
+            autoPick()
+        } catch (e: Exception) {
+            render("启动失败: ${e.javaClass.simpleName}: ${e.message}")
+        }
     }
 
     override fun onDestroy() {
@@ -103,6 +108,12 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     }
 
     private fun autoPick() {
+        try { autoPick0() } catch (e: Exception) {
+            render("扫描失败: ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun autoPick0() {
         val mice = hidMice()
         if (mice.isEmpty()) { render("没找到 USB 鼠标(boot-protocol)。插好 OTG 后再开本页。"); return }
         val d = mice[0]
@@ -125,6 +136,12 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     }
 
     private fun open(dev: UsbDevice) {
+        try { open0(dev) } catch (e: Exception) {
+            render("接管失败: ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun open0(dev: UsbDevice) {
         val itf = findBootInterface(dev) ?: run { render("设备无 boot-protocol HID 接口: ${dev.deviceName}"); return }
         val mgr = usbManager ?: return
         val c = mgr.openDevice(dev) ?: run { render("openDevice 失败"); return }
