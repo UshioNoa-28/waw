@@ -37,12 +37,8 @@
 
             <activity
             android:name=".MouseUsbProxyActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
-            </intent-filter>
-            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter" />
-        </activity>
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
         <activity
             android:name=".MouseProxyActivity"
             android:exported="false"

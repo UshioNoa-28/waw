@@ -63,20 +63,16 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32) }
-        setContentView(out)
         CrashLog.log("USB proxy onCreate enter")
-        try {
-            usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            val flags = if (android.os.Build.VERSION.SDK_INT >= 33) Context.RECEIVER_NOT_EXPORTED else 0
-            registerReceiver(permReceiver, IntentFilter(ACTION_PERM), flags)
-            handler.post(flush)
-            render()
-            autoPick()
-        } catch (e: Exception) {
-            CrashLog.log("USB proxy init fail: ${e}")
-            render("启动失败: ${e.javaClass.simpleName}: ${e.message}")
-        }
-        CrashLog.log("USB proxy onCreate exit ok")
+        row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        row.addView(out, android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        val btn = android.widget.Button(this).apply { text = "开始接管鼠标" }
+        btn.setOnClickListener { safeInit() }
+        row.addView(btn, android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
+        setContentView(row)
     }
 
     override fun onDestroy() {
@@ -86,6 +82,24 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         claimed?.let { conn?.releaseInterface(it) }
         try { conn?.close() } catch (_: Exception) {}
         super.onDestroy()
+    }
+
+    private var inited = false
+
+    private fun safeInit() {
+        if (inited) return
+        try {
+            usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+            val rflags = if (android.os.Build.VERSION.SDK_INT >= 33) Context.RECEIVER_NOT_EXPORTED else 0
+            registerReceiver(permReceiver, IntentFilter(ACTION_PERM), rflags)
+            handler.post(flush)
+            inited = true
+            render("已就绪,点「开始接管鼠标」")
+            autoPick()
+        } catch (e: Exception) {
+            CrashLog.log("init fail: ${e}")
+            render("启动失败: ${e.javaClass.simpleName}: ${e.message}")
+        }
     }
 
     private val permReceiver = object : BroadcastReceiver() {
