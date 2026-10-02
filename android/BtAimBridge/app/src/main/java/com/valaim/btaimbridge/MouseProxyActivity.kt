@@ -28,6 +28,7 @@ class MouseProxyActivity : AppCompatActivity() {
     @Volatile private var pendY = 0
     @Volatile private var pendWheel = 0
     @Volatile private var btnMask = 0
+    @Volatile private var trackedButtons = 0
     @Volatile private var lastX = -1f
     @Volatile private var lastY = -1f
 
@@ -117,23 +118,30 @@ class MouseProxyActivity : AppCompatActivity() {
                 }
                 lastX = x; lastY = y
             }
-            MotionEvent.ACTION_BUTTON_PRESS -> when (ev.button) {
-                MotionEvent.BUTTON_PRIMARY -> { lmbHeld = true; pressAt = System.currentTimeMillis() }
-                MotionEvent.BUTTON_SECONDARY -> { btnMask = btnMask or 0x02; hid()?.sendReport(btnMask, 0, 0, 0) }
-                MotionEvent.BUTTON_TERTIARY -> { btnMask = btnMask or 0x04; hid()?.sendReport(btnMask, 0, 0, 0) }
-            }
-            MotionEvent.ACTION_BUTTON_RELEASE -> when (ev.button) {
-                MotionEvent.BUTTON_PRIMARY -> {
-                    lmbHeld = false
-                    if (lmbDownSent) {
-                        lmbDownSent = false
-                        btnMask = btnMask and 1.inv()
-                        hid()?.sendReport(btnMask, 0, 0, 0)
-                    } else lmbWantsRelease = true
+            MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> {
+                val press = ev.actionMasked == MotionEvent.ACTION_BUTTON_PRESS
+                val state = ev.buttonState
+                val diff = if (press) state and trackedButtons.inv() else trackedButtons and state.inv()
+                trackedButtons = state
+                if (diff and MotionEvent.BUTTON_PRIMARY != 0) {
+                    if (press) { lmbHeld = true; pressAt = System.currentTimeMillis() }
+                    else {
+                        lmbHeld = false
+                        if (lmbDownSent) {
+                            lmbDownSent = false
+                            btnMask = btnMask and 1.inv()
+                            hid()?.sendReport(btnMask, 0, 0, 0)
+                        } else lmbWantsRelease = true
+                    }
                 }
-                MotionEvent.BUTTON_SECONDARY -> { btnMask = btnMask and 0x02.inv(); hid()?.sendReport(btnMask, 0, 0, 0) }
-                MotionEvent.BUTTON_TERTIARY -> { btnMask = btnMask and 0x04.inv(); hid()?.sendReport(btnMask, 0, 0, 0) }
-            }
+                if (diff and MotionEvent.BUTTON_SECONDARY != 0) {
+                    btnMask = if (press) btnMask or 0x02 else btnMask and 0x02.inv()
+                    hid()?.sendReport(btnMask, 0, 0, 0)
+                }
+                if (diff and MotionEvent.BUTTON_TERTIARY != 0) {
+                    btnMask = if (press) btnMask or 0x04 else btnMask and 0x04.inv()
+                    hid()?.sendReport(btnMask, 0, 0, 0)
+                }
         }
         val vs = ev.getAxisValue(MotionEvent.AXIS_VSCROLL).toInt()
         if (vs != 0) pendWheel += vs
