@@ -515,6 +515,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     _last_snap = 0.0
     _last_ping = 0.0
     _last_rt = 0.0
+    _rt_state: tuple[float, int, int] | None = None
     snap_until = 0.0         # phone big-button 'lock and fire' window
     _was_held = False
     _press_shot_until = 0.0
@@ -585,17 +586,27 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             detections, cursor = snap.detections, snap.cursor
             tick += 1
         else:
+            _idle = not (bt_lmb_held() or time.monotonic() < _snap_session_until)
             if cfg.latch_throttle and engine.is_latched and det_cache is not None and (tick % 2 == 0):
                 img, crop_x, crop_y, crop_w, crop_h, detections = det_cache
             else:
                 _tg = time.perf_counter()
                 img, crop_x, crop_y, crop_w, crop_h = capture.grab()
                 _ti = time.perf_counter()
-                detections = detector.detect(img, crop_x, crop_y)
-                _te = time.perf_counter()
-                grab_ms = (_ti - _tg) * 1000.0
-                infer_ms = (_te - _ti) * 1000.0
-                det_cache = (img, crop_x, crop_y, crop_w, crop_h, detections)
+                if _idle:
+                    # nobody is clicking: stay blind-cheap. capture keeps dxcam
+                    # warm so the first inference after a press uses a 5ms-old
+                    # frame, not a stale one.
+                    detections = []
+                    grab_ms = (_ti - _tg) * 1000.0
+                    infer_ms = 0.0
+                    time.sleep(0.003)
+                else:
+                    detections = detector.detect(img, crop_x, crop_y)
+                    _te = time.perf_counter()
+                    grab_ms = (_ti - _tg) * 1000.0
+                    infer_ms = (_te - _ti) * 1000.0
+                    det_cache = (img, crop_x, crop_y, crop_w, crop_h, detections)
             tick += 1
             cursor = capture.crosshair()
         if cfg.dump_dir and time.monotonic() - _dump_t >= _dump_next:
@@ -703,26 +714,34 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             if _rt is not None and trace is not None:
                 trace.writerow(["ping", round(_nowp - t0, 4), round(_rt, 1)])
                 trace_f.flush()
-        if cfg.rt_probe and _nowp - _last_rt > 8.0 and not in_game:
+        if cfg.rt_probe and _nowp - _last_rt > 8.0 and not in_game and _rt_state is None:
             _last_rt = _nowp
             try:
                 from .input_ctrl import get_cursor_pos
                 x0, y0 = get_cursor_pos()
                 move_mouse(40, 0)
-                hit = None
-                _tp = time.monotonic()
-                while time.monotonic() - _tp < 0.5:
-                    x1, y1 = get_cursor_pos()
-                    if abs(x1 - x0) >= 15:
-                        hit = (time.monotonic() - _tp) * 1000.0
-                        break
-                    time.sleep(0.004)
-                move_mouse(-40, 0)
-                if trace is not None:
-                    trace.writerow(["rt", round(_nowp - t0, 4), round(hit, 1) if hit else -1])
-                    trace_f.flush()
+                _rt_state = (_nowp, x0, y0)
             except Exception:
                 pass
+        if _rt_state is not None:
+            try:
+                from .input_ctrl import get_cursor_pos
+                _rp, _rx0, _ry0 = _rt_state
+                x1, y1 = get_cursor_pos()
+                if abs(x1 - _rx0) >= 15:
+                    if trace is not None:
+                        trace.writerow(["rt", round(_nowp - t0, 4), round((_nowp - _rp) * 1000.0, 1)])
+                        trace_f.flush()
+                    move_mouse(-40, 0)
+                    _rt_state = None
+                elif _nowp - _rp > 0.5:
+                    if trace is not None:
+                        trace.writerow(["rt", round(_nowp - t0, 4), -1])
+                        trace_f.flush()
+                    move_mouse(-40, 0)
+                    _rt_state = None
+            except Exception:
+                _rt_state = None
         _sd = cfg.snap_dir
         if _sd and _nowp - _last_snap > 5.0:
             _last_snap = _nowp
