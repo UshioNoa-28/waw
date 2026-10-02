@@ -124,7 +124,7 @@ class MouseProxyActivity : AppCompatActivity() {
                     // phantom stuck: no physical press can still be down this long
                     btnMask = btnMask and 1.inv()
                     lmbDownSent = false
-                    h.clickReport(btnMask)
+                    clickReport(btnMask)
                     CrashLog.log("phantom LMB cleared")
                 }
             }
