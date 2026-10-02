@@ -50,7 +50,10 @@ class HidMouseController(
 
     private val callback = object : BluetoothHidDevice.Callback() {
         override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {
-            if (id.toInt() == 1) BridgeGlobals.onVendorFrame?.invoke(data)
+            if (id.toInt() == 1) {
+                if (!vendorSeen) { vendorSeen = true; CrashLog.log("hid: first SET_REPORT id1 from PC") }
+                BridgeGlobals.onVendorFrame?.invoke(data)
+            }
         }
 
         @SuppressLint("MissingPermission")
@@ -65,7 +68,7 @@ class HidMouseController(
                     // The host may remember a stuck button state from a last
                     // session that ended abruptly; clear it immediately.
                     try {
-                        hidDevice?.sendReport(device, 0, MouseReport.build(0, 0, 0, 0))
+                        hidDevice?.sendReport(device, 2, MouseReport.build(0, 0, 0, 0))
                     } catch (_: SecurityException) {
                     }
                 }
@@ -91,6 +94,7 @@ class HidMouseController(
 
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, isRegistered: Boolean) {
             registered = isRegistered
+            CrashLog.log("hid: appStatus registered=$isRegistered")
             if (isRegistered) {
                 onState("HID registered")
                 // Registration is not connection: after the app was killed and
@@ -110,8 +114,11 @@ class HidMouseController(
         @SuppressLint("MissingPermission")
         override fun onGetReport(device: BluetoothDevice, type: Byte, id: Byte, bufferSize: Int) {
             try {
-                val payload = if (type == BluetoothHidDevice.REPORT_TYPE_INPUT && id == 0.toByte())
-                    MouseReport.build(0, 0, 0, 0) else ByteArray(0)
+                val payload = when {
+                type == BluetoothHidDevice.REPORT_TYPE_INPUT && id == 2.toByte() -> MouseReport.build(0, 0, 0, 0)
+                type == BluetoothHidDevice.REPORT_TYPE_INPUT && id == 1.toByte() -> ByteArray(8)
+                else -> ByteArray(0)
+            }
                 hidDevice?.replyReport(device, type, id, payload)
             } catch (_: Exception) {
             }
@@ -276,6 +283,7 @@ class HidMouseController(
             )
             try {
                 val ok = hidDevice?.registerApp(sdp, null, QOS, APP_EXECUTOR, callback) ?: false
+                CrashLog.log("hid: registerApp ok=$ok descBytes=${MouseReport.DESCRIPTOR.size}")
                 if (!ok) onState("registerApp failed")
             } catch (e: SecurityException) {
                 onState("Permission denied: ${e.message}")
