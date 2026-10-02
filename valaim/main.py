@@ -508,6 +508,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     snap_until = 0.0         # phone big-button 'lock and fire' window
     _was_held = False
     _no_t_since: float | None = None
+    _frames_flush = 0
     snap_click_pending = 0.0
     _dump_t = 0.0
     _dump_next = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
@@ -660,8 +661,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             except Exception:
                 pass
             snap_until = 0.0
-        _frames_flush = getattr(main_run, "_fr", 0) + 1
-        main_run._fr = _frames_flush
+        _frames_flush += 1
         if trace is not None and _frames_flush % 40 == 0:
             try:
                 trace_f.flush()
