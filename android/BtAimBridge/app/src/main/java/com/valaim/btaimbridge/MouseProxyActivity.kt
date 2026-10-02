@@ -32,6 +32,7 @@ class MouseProxyActivity : AppCompatActivity() {
     @Volatile private var lastX = -1f
     @Volatile private var lastY = -1f
 
+    @Volatile private var lastDownAt = 0L
     @Volatile private var lmbHeld = false
     @Volatile private var l1Sent = 0
     @Volatile private var lmbDownSent = false
@@ -69,7 +70,7 @@ class MouseProxyActivity : AppCompatActivity() {
                         // PC assist not live: plain passthrough, behave exactly
                         // like an ungated mouse (stay down while held, up on release)
                         btnMask = btnMask or 0x01
-                        lmbDownSent = true
+                        lmbDownSent = true; lastDownAt = System.currentTimeMillis()
                         h.sendReport(btnMask, 0, 0, 0)
                         if (lmbWantsRelease) {
                             lmbHeld = false; lmbWantsRelease = false
@@ -84,7 +85,7 @@ class MouseProxyActivity : AppCompatActivity() {
                         if (nailed || System.currentTimeMillis() - pressAt > graceMs) {
                             if (nailed) nails++ else holds++
                             btnMask = btnMask or 0x01
-                            lmbDownSent = true
+                            lmbDownSent = true; lastDownAt = System.currentTimeMillis()
                             released = true
                             if (lmbWantsRelease) {           // quick tap while gated
                                 lmbHeld = false; lmbWantsRelease = false
@@ -107,6 +108,13 @@ class MouseProxyActivity : AppCompatActivity() {
                     val cw = pendWheel.coerceIn(-3, 3)
                     pendWheel -= cw
                     h.sendReport(btnMask, 0, 0, cw)
+                }
+                if ((btnMask and 0x01) != 0 && System.currentTimeMillis() - lastDownAt > 2000 && !lmbHeld) {
+                    // phantom stuck: no physical press can still be down this long
+                    btnMask = btnMask and 1.inv()
+                    lmbDownSent = false
+                    h.sendReport(btnMask, 0, 0, 0)
+                    CrashLog.log("phantom LMB cleared")
                 }
             }
             handler.postDelayed(this, 4)
@@ -139,11 +147,15 @@ class MouseProxyActivity : AppCompatActivity() {
                 }
             }
             MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> {
+                // canonical per-event button identity (state-diff guessing lost
+                // releases on some mice -> phantom held -> every later click
+                // invisible to the game = the random swallowing)
+                val primary = ev.actionButton == MotionEvent.BUTTON_PRIMARY ||
+                    (ev.actionMasked == MotionEvent.ACTION_BUTTON_PRESS && ev.buttonState and MotionEvent.BUTTON_PRIMARY != 0) ||
+                    (ev.actionMasked == MotionEvent.ACTION_BUTTON_RELEASE && ev.buttonState and MotionEvent.BUTTON_PRIMARY != 0)
                 val press = ev.actionMasked == MotionEvent.ACTION_BUTTON_PRESS
-                val state = ev.buttonState
-                val diff = if (press) state and trackedButtons.inv() else trackedButtons and state.inv()
-                trackedButtons = state
-                if (diff and MotionEvent.BUTTON_PRIMARY != 0) {
+                trackedButtons = ev.buttonState
+                if (primary) {
                     if (press) {
                         if (!lmbHeld && lmbWantsRelease && !lmbDownSent) {
                             // second tap while first is still gated: release the
