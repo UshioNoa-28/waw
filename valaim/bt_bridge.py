@@ -134,6 +134,11 @@ class BtBridge:
                 data = sock.recv(256)
                 if not data:
                     return
+                try:
+                    with open(os.path.join(os.getcwd(), "bt_rx.log"), "ab") as _f:
+                        _f.write(b"[" + time.strftime("%H:%M:%S").encode() + b"] " + data + b"||\n")
+                except Exception:
+                    pass
                 buf += data
                 while b"\n" in buf:
                     line, _, buf = buf.partition(b"\n")
