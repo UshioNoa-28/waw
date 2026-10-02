@@ -145,6 +145,7 @@ class BtBridge:
                     if line.strip() == b"L1":
                         with self._lock:
                             self._lmb = True
+                            self._lmb_at = time.monotonic()
                     elif line.strip() == b"L0":
                         with self._lock:
                             self._lmb = False
@@ -191,6 +192,9 @@ class BtBridge:
 
     def lmb_held(self) -> bool:
         with self._lock:
+            if getattr(self, "_lmb", False) and time.monotonic() - getattr(self, "_lmb_at", 0.0) > 5.0:
+                self._lmb = False  # lost L0 -> never phantom-hold
+                return False
             return bool(getattr(self, "_lmb", False))
 
     def pop_lock_flips(self) -> int:

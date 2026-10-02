@@ -145,6 +145,20 @@ class MouseProxyActivity : AppCompatActivity() {
                 trackedButtons = state
                 if (diff and MotionEvent.BUTTON_PRIMARY != 0) {
                     if (press) {
+                        if (!lmbHeld && lmbWantsRelease && !lmbDownSent) {
+                            // second tap while first is still gated: release the
+                            // first IMMEDIATELY as a plain click (never swallow a
+                            // shot), then open a fresh snap window for this tap
+                            btnMask = btnMask or 0x01
+                            hid()?.sendReport(btnMask, 0, 0, 0)
+                            handler.postDelayed({
+                                val up = btnMask and 1.inv()
+                                btnMask = up
+                                hid()?.sendReport(up, 0, 0, 0)
+                            }, 20)
+                            lmbWantsRelease = false
+                            holds++
+                        }
                         lmbHeld = true; pressAt = System.currentTimeMillis()
                         BridgeGlobals.server?.sendLmb(true)
                         l1Sent++
