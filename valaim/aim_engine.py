@@ -85,6 +85,7 @@ class AimEngine:
         self._last_obs: tuple | None = None
         self._land_armed = False
         self._bu = (1.0, 0.0)
+        self._win: list = []
         self._bcam = [0.0, 0.0]
         self._bexp = 0.0      # expected px drop of the in-flight stroke
         self._bref = None     # observation at fire time (for landing detection)
@@ -219,12 +220,23 @@ class AimEngine:
                                        dy - self._last_obs[1] - cam[1])
             self._last_obs = (dx, dy)
 
-            # Stability gate: fire (and collect aim frames) only when the lock
-            # is old enough AND the frame is calm.
+            # Stability gate v2: NET drift over a ~90ms window, not single-frame
+            # motion. A flick accumulates big drift; standing jitter cancels out.
+            # (Single-target live sessions could never estimate cam motion, so
+            # the old per-frame check saw every user-flick as churn: 0 fires.)
+            self._win = [w for w in self._win if nowb - w[0] <= 0.10]
+            self._win.append((nowb, dx, dy, self._bcam[0], self._bcam[1]))
+            if len(self._win) > 8:
+                self._win.pop(0)
+            drift = 0.0
+            if len(self._win) >= 2:
+                w0 = self._win[0]
+                drift = max(0.0, math.hypot(dx - w0[1] - (self._bcam[0] - w0[3]), dy - w0[2] - (self._bcam[1] - w0[4])))
             thr = p.settle_px
             if p.settle_frac > 0 and box_w > 0:
                 thr = max(15.0, p.settle_frac * box_w)
-            settled = True if self._lock_at is None else (nowb - self._lock_at >= p.settle_ms / 1000.0 and obs_moved < thr)
+            calm = drift < max(thr, 20.0)
+            settled = self._lock_at is not None and nowb - self._lock_at >= p.settle_ms / 1000.0 and calm
             if not settled:
                 self._bacc = []
 
@@ -236,7 +248,7 @@ class AimEngine:
             landed = False
             if p.burst_early and self._bref is not None and self._bexp > 25.0 \
                     and nowb - self._burst_t >= 0.025:
-                if self._land_armed and obs_moved < thr:
+                if self._land_armed and calm:
                     landed = True
                     self._land_armed = False
                 else:
