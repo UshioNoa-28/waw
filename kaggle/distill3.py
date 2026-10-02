@@ -18,14 +18,13 @@ def pip(*pkgs):
 pip("ultralytics"); pip("huggingface_hub"); import cv2, numpy as np
 
 # ============================================================
-# ## 1. 收图(你上传的 round3/frames 数据集优先,公开 haqi001 可选补足)
+# ## 1. 收图: 直接吃 /kaggle/input 下所有图片(你挂载的 round3 数据集),公开 haqi001 可选补足
 
+import zipfile
 WORK = Path('/kaggle/working/ds'); WORK.mkdir(parents=True, exist_ok=True)
 IMGS = WORK/'images'; IMGS.mkdir(exist_ok=True)
 seen=set(); n=0
 for root, dirs, files in os.walk('/kaggle/input'):
-    if not any(k in root.lower() for k in ("round3","frame","replay","shot")):
-        continue
     for fn in files:
         if not fn.lower().endswith((".jpg",".jpeg",".png")): continue
         p=os.path.join(root,fn); rp=os.path.realpath(p)
@@ -36,17 +35,14 @@ for root, dirs, files in os.walk('/kaggle/input'):
         except OSError: shutil.copy(p,dst)
         n+=1
 print("uploaded images:", n)
-assert n>=300, "没找到上传的 round3 数据集(应含纯图),先挂载再跑"
+assert n>=300, "没找到挂载的数据集图片(检查 Add Input 是否指向你的 round3 数据集)"
 
 try:
     from huggingface_hub import hf_hub_download
     tmp='/kaggle/working/pub'; os.makedirs(tmp, exist_ok=True)
     for name in ("score.zip","source data.zip"):
         zp=hf_hub_download(repo_id='haqi001/VALORANT_destection_head_body_yolo', filename=name, repo_type='dataset', local_dir=tmp)
-        with zipfile.ZipFile(zp) as z: pass
-    import zipfile
-    for name in ("score.zip","source data.zip"):
-        with zipfile.ZipFile(tmp+"/"+name) as z: z.extractall(tmp+'/x')
+        with zipfile.ZipFile(zp) as z: z.extractall(tmp+'/x')
     npub=0
     for f in glob.glob(tmp+'/x/**/*.jpg', recursive=True)+glob.glob(tmp+'/x/**/*.png', recursive=True):
         if npub<2000: shutil.copy(f, IMGS/f'P{npub:06d}.jpg'); npub+=1
