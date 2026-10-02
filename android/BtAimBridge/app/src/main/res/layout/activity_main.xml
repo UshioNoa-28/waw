@@ -92,7 +92,7 @@
             android:id="@+id/btnMouseProxy"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="鼠标代理 (OTG 鼠标→手机→电脑)" />
+            android:text="USB 鼠标代理 (推荐: 直读鼠标)" />
 
         <Button
             android:id="@+id/btnMouseTest"

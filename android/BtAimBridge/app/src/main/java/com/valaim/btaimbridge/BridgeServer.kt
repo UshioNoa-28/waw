@@ -47,6 +47,8 @@ class BridgeServer(
     @Volatile private var pendY = 0
     private var drainThread: Thread? = null
 
+    fun isAlive(): Boolean = running && client != null
+
     fun start() {
         if (running) return
         running = true

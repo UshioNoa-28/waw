@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<Button>(R.id.btnMouseProxy).setOnClickListener {
-            startActivity(android.content.Intent(this, MouseProxyActivity::class.java))
+            startActivity(android.content.Intent(this, MouseUsbProxyActivity::class.java))
         }
         findViewById<Button>(R.id.btnMouseTest).setOnClickListener {
             startActivity(android.content.Intent(this, MouseTestActivity::class.java))
