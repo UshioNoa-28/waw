@@ -52,6 +52,7 @@ class AimConfig:
     aim_comp: int = 4
     async_pipeline: bool = False  # measured SLOWER (GIL contention, no GPU gain); kept as --async experiment flag
     latch_throttle: bool = True   # half-rate detection while nailed down
+    snap_dir: str = ""          # annotated frames every 5s (debug the model's eyes)
     burst: bool = True
     burst_cooldown: float = 0.28
     burst_gain: float = 1.0

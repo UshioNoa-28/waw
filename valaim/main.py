@@ -117,6 +117,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--bt-test", action="store_true", help="Ignore the model; just drive the mouse in a circle to test the BT link")
     p.add_argument("--bt-test-radius", type=int, default=60)
     p.add_argument("--debug", action="store_true")
+    p.add_argument("--snap-dir", default="", help="every 5s save annotated capture frame here (what the model actually sees)")
     p.add_argument("--max-frames", type=int, default=0)
     p.add_argument("--game-process", default="VALORANT",
                    help="Only act while a foreground process with this name runs ('' disables the gate)")
@@ -125,6 +126,7 @@ def parse_args() -> argparse.Namespace:
 
 def config_from_args(args: argparse.Namespace) -> AimConfig:
     return AimConfig(
+        snap_dir=args.snap_dir,
         model_path=resolve_model_path(args.model),
         model_info=resolve_model_path(args.model_info) if args.model_info else None,
         backend=args.backend,
@@ -506,6 +508,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     grab_ms = infer_ms = 0.0
     _prev_heads: list = []   # camera-motion estimation from common box shift
     nail_state = False
+    _last_snap = 0.0
     snap_until = 0.0         # phone big-button 'lock and fire' window
     _was_held = False
     _press_shot_until = 0.0
@@ -684,6 +687,24 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         if trace is not None and _frames_flush % 40 == 0:
             try:
                 trace_f.flush()
+            except Exception:
+                pass
+        _sd = cfg.snap_dir
+        if _sd and _nowp - _last_snap > 5.0:
+            _last_snap = _nowp
+            try:
+                import cv2 as _cv2
+                _fr = snap.img.copy()
+                _ox, _oy = snap.crop_x, snap.crop_y
+                for _d in detections:
+                    _cv2.rectangle(_fr, (int(_d.x-_ox), int(_d.y-_oy)),
+                                   (int(_d.x-_ox+_d.w), int(_d.y-_oy+_d.h)), (0, 255, 0), 2)
+                    _cv2.putText(_fr, f"{_d.name}{_d.conf:.2f}", (int(_d.x-_ox), int(_d.y-_oy)-4),
+                                 _cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                _cv2.drawMarker(_fr, (int(cursor[0]-_ox), int(cursor[1]-_oy)), (0, 0, 255),
+                                _cv2.MARKER_CROSS, 24, 2)
+                os.makedirs(_sd, exist_ok=True)
+                _cv2.imwrite(os.path.join(_sd, f"snap{int(_nowp)}_d{len(detections)}.png"), _fr)
             except Exception:
                 pass
         if trace is not None:
