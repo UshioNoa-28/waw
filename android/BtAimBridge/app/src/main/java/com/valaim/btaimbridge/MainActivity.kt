@@ -44,7 +44,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etPort: EditText
     private lateinit var btnToggle: Button
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onResume() {
+        super.onResume()
+        CrashLog.log("MainActivity resume, tail: ${CrashLog.tail(3)}")
+    }
+
+        override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashLog.init(this)
         CrashLog.log("MainActivity created")
@@ -74,7 +79,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<Button>(R.id.btnMouseProxy).setOnClickListener {
-            startActivity(android.content.Intent(this, MouseUsbProxyActivity::class.java))
+            try { startActivity(android.content.Intent(this, MouseUsbProxyActivity::class.java)) }
+            catch (e: Exception) { setStatus("打开代理页失败: ${e.javaClass.simpleName} ${e.message}") }
         }
         findViewById<Button>(R.id.btnMouseTest).setOnClickListener {
             startActivity(android.content.Intent(this, MouseTestActivity::class.java))

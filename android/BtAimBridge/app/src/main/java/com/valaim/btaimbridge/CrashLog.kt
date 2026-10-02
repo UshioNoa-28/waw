@@ -18,6 +18,14 @@ object CrashLog {
         }
     }
 
+    fun tail(n: Int = 6): String {
+        return try {
+            val f = file ?: return "-"
+            if (!f.exists()) return "(空)"
+            f.readLines().takeLast(n).joinToString(" | ")
+        } catch (e: Exception) { "read fail ${e.message}" }
+    }
+
     fun log(msg: String) {
         try {
             file?.appendText("${System.currentTimeMillis()} $msg\n")
