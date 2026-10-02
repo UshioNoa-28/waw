@@ -18,6 +18,7 @@ from .input_ctrl import (
     bt_lock_events,
     bt_nail,
     bt_lmb_held,
+    bt_armed,
     bt_snap_events,
     active_backend,
     close_backend,
@@ -638,6 +639,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         if not lock_on:
             active = False
             gate_note = "锁定OFF - 手机按[锁定]恢复"
+        bt_armed(bool(active))
         target = selector.select(detections, cursor) if active else None
         dist = None
         # nail = safe to fire: either fully latched, or already inside ~half a

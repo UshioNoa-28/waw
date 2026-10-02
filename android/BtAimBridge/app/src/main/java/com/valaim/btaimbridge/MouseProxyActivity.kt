@@ -62,7 +62,23 @@ class MouseProxyActivity : AppCompatActivity() {
             val h = hid()
             if (h != null) {
                 var released = false
+                val assist = BridgeGlobals.server?.assistOn == true
                 if ((lmbHeld || lmbWantsRelease) && !lmbDownSent) {
+                    if (!assist) {
+                        // PC assist not live: plain passthrough, behave exactly
+                        // like an ungated mouse (stay down while held, up on release)
+                        btnMask = btnMask or 0x01
+                        lmbDownSent = true
+                        h.sendReport(btnMask, 0, 0, 0)
+                        if (lmbWantsRelease) {
+                            lmbHeld = false; lmbWantsRelease = false
+                            handler.postDelayed({
+                                val up = btnMask and 1.inv()
+                                btnMask = up
+                                hid()?.sendReport(up, 0, 0, 0)
+                            }, 20)
+                        }
+                    } else
                     val nailed = BridgeGlobals.server?.nailOk == true
                     if (nailed || System.currentTimeMillis() - pressAt > graceMs) {
                         if (nailed) nails++ else holds++
@@ -100,7 +116,7 @@ class MouseProxyActivity : AppCompatActivity() {
             appendLine("鼠标代理运行中(纯中转版,无指针捕捉)")
             appendLine("移动转发 $moves 帧 | 扣左键: 钉住放 $nails / 超时放 $holds")
             appendLine("左键状态: ${if (lmbHeld) if (lmbDownSent) "已放行" else "扣住等待钉住…" else "无"}")
-            appendLine("PC 钉住信号: ${BridgeGlobals.server?.nailOk}")
+            appendLine("PC 辅助: ${if (BridgeGlobals.server?.assistOn == true) "就绪(扣左键等吸附)" else "未开(左键直通)"} 钉住: ${BridgeGlobals.server?.nailOk}")
             append("移动即时转发,左键最多等 ${graceMs}ms")
         }
     }

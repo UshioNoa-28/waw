@@ -72,6 +72,7 @@ class BtBridge:
         self._flips = 0
         self._lmb = False
         self._nail = -1   # -1 unknown, 0/1 last sent state
+        self._armed = -1  # -1 unknown; 1 = assist live in-game (phone may gate LMB)
 
         self._thread = threading.Thread(target=self._run, name="bt-bridge", daemon=True)
         self._thread.start()
@@ -159,6 +160,15 @@ class BtBridge:
         except OSError:
             pass
 
+    def set_armed(self, on: bool) -> None:
+        v = 1 if on else 0
+        with self._cond:
+            if v == self._armed:
+                return
+            self._armed = v
+            self._dirty = True
+            self._cond.notify_all()
+
     def set_nail(self, on: bool) -> None:
         v = 1 if on else 0
         with self._cond:
@@ -196,6 +206,8 @@ class BtBridge:
                 if self._dirty:
                     if self._nail >= 0:
                         lines.append(f"N {self._nail}")
+                    if self._armed >= 0:
+                        lines.append(f"A {self._armed}")
                     if self._buttons != self._sent_buttons:
                         lines.append(f"B {self._buttons & 0x1F}")
                         self._sent_buttons = self._buttons

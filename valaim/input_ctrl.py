@@ -261,6 +261,15 @@ def bt_snap_events() -> int:
     return 0
 
 
+def bt_armed(on: bool) -> None:
+    """Tell the phone the assist is live (in-game, enabled) - only then gate LMB."""
+    if _BT is not None:
+        try:
+            _BT.set_armed(on)
+        except Exception:
+            pass
+
+
 def bt_lmb_held() -> bool:
     """Phone reports the user is holding left mouse (proxy gate)."""
     if _BT is not None:

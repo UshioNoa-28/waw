@@ -36,6 +36,7 @@ class BridgeServer(
     @Volatile private var client: Socket? = null
     /** PC-side latch state, drives the mouse-proxy left-button gate. */
     @Volatile var nailOk: Boolean = false
+    @Volatile var assistOn: Boolean = false
     var onNail: ((Boolean) -> Unit)? = null
     @Volatile private var buttonMask = 0
 
@@ -75,6 +76,7 @@ class BridgeServer(
 
     fun stop() {
         running = false
+        assistOn = false
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
         drainThread?.interrupt()
@@ -214,6 +216,10 @@ class BridgeServer(
             "N" -> {
                 val on = (parts.getOrNull(1)?.toIntOrNull() ?: 0) != 0
                 if (on != nailOk) { nailOk = on; onNail?.invoke(on) }
+            }
+            "A" -> {
+                assistOn = (parts.getOrNull(1)?.toIntOrNull() ?: 0) != 0
+                if (!assistOn) nailOk = false
             }
         }
     }
