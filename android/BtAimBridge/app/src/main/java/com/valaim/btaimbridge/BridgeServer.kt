@@ -51,20 +51,24 @@ class BridgeServer(
     fun isAlive(): Boolean = running && client != null
 
     /** Fire button press from the big red button -> 'T' to the PC over the client socket. */
-    fun sendLmb(on: Boolean) {
+    private val tx = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private fun sendAsync(line: String) {
         val c = client ?: return
-        try {
-            c.getOutputStream().write(if (on) "L1\n".toByteArray() else "L0\n".toByteArray())
-            c.getOutputStream().flush()
-        } catch (_: Exception) { }
+        tx.execute {
+            try {
+                c.getOutputStream().write(line.toByteArray())
+                c.getOutputStream().flush()
+            } catch (_: Exception) { }
+        }
+    }
+
+    fun sendLmb(on: Boolean) {
+        sendAsync(if (on) "L1\n" else "L0\n")
     }
 
     fun sendTrigger() {
-        val c = client ?: return
-        try {
-            c.getOutputStream().write("T\n".toByteArray())
-            c.getOutputStream().flush()
-        } catch (_: Exception) { }
+        sendAsync("T\n")
     }
 
     fun start() {
@@ -180,12 +184,7 @@ class BridgeServer(
     /** Force the host to see "no buttons held" - cures stuck-click states. */
     /** Ask the PC to toggle its aim-lock (button in MainActivity). */
     fun sendLockToggle() {
-        val c = client ?: return
-        try {
-            c.getOutputStream().write("L\n".toByteArray())
-        } catch (e: Exception) {
-            onLog("sendLock failed: ${e.message}")
-        }
+        sendAsync("L\n")
     }
 
     private fun releaseAll() {
