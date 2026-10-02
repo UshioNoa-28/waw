@@ -507,6 +507,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     nail_state = False
     snap_until = 0.0         # phone big-button 'lock and fire' window
     _was_held = False
+    _press_shot_until = 0.0
     _no_t_since: float | None = None
     _frames_flush = 0
     snap_click_pending = 0.0
@@ -629,6 +630,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         held = bt_lmb_held() or snap_armed
         if held and not _was_held:
             engine.reset()
+            _press_shot_until = _nowp + 0.20
         _was_held = held
         flips = bt_lock_events()
         if flips:
@@ -733,7 +735,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                         camx = sorted(v[0] for v in vecs)[len(vecs) // 2]
                         camy = sorted(v[1] for v in vecs)[len(vecs) // 2]
                 _prev_heads = cur_h
-                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy)) if (dist > cfg.min_move and held) else (0, 0)
+                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy), force=_nowp < _press_shot_until) if (dist > cfg.min_move and held) else (0, 0)
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
                     trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3], 1 if held else 0)

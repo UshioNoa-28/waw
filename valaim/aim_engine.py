@@ -135,7 +135,7 @@ class AimEngine:
 
     def step(self, dx: float, dy: float,
              lead_x: float = 0.0, lead_y: float = 0.0,
-             box_w: float = 0.0, cam=(0.0, 0.0)) -> tuple[int, int]:
+             box_w: float = 0.0, cam=(0.0, 0.0), force: bool = False) -> tuple[int, int]:
         """Return a relative mouse step for the current pixel error.
 
         lead_x/lead_y are caller-computed target-motion predictions (px); they
@@ -236,7 +236,7 @@ class AimEngine:
             if p.settle_frac > 0 and box_w > 0:
                 thr = max(15.0, p.settle_frac * box_w)
             calm = drift < max(thr, 20.0)
-            settled = self._lock_at is not None and nowb - self._lock_at >= p.settle_ms / 1000.0 and calm
+            settled = force or (self._lock_at is not None and nowb - self._lock_at >= p.settle_ms / 1000.0 and calm)
             if not settled:
                 self._bacc = []
 
