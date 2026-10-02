@@ -20,7 +20,7 @@ import androidx.appcompat.app.AppCompatActivity
  */
 class MouseProxyActivity : AppCompatActivity() {
 
-    private val graceMs = 140L
+    private val graceMs = 450L
     private lateinit var out: TextView
     private val handler = Handler(Looper.getMainLooper())
 
@@ -62,7 +62,7 @@ class MouseProxyActivity : AppCompatActivity() {
             val h = hid()
             if (h != null) {
                 var released = false
-                if (lmbHeld && !lmbDownSent) {
+                if ((lmbHeld || lmbWantsRelease) && !lmbDownSent) {
                     val nailed = BridgeGlobals.server?.nailOk == true
                     if (nailed || System.currentTimeMillis() - pressAt > graceMs) {
                         if (nailed) nails++ else holds++
@@ -125,22 +125,21 @@ class MouseProxyActivity : AppCompatActivity() {
                 val diff = if (press) state and trackedButtons.inv() else trackedButtons and state.inv()
                 trackedButtons = state
                 if (diff and MotionEvent.BUTTON_PRIMARY != 0) {
-                    if (press) { lmbHeld = true; pressAt = System.currentTimeMillis() }
+                    if (press) {
+                        lmbHeld = true; pressAt = System.currentTimeMillis()
+                        BridgeGlobals.server?.sendLmb(true)
+                    }
                     else {
                         lmbHeld = false
+                        BridgeGlobals.server?.sendLmb(false)
                         if (lmbDownSent) {
                             lmbDownSent = false
                             btnMask = btnMask and 1.inv()
                             hid()?.sendReport(btnMask, 0, 0, 0)
                         } else {
-                            // released before the gate opened: it was a quick
-                            // tap - fire it NOW (down, up) instead of eating it
-                            btnMask = btnMask or 0x01
-                            hid()?.sendReport(btnMask, 0, 0, 0)
-                            handler.postDelayed({
-                                btnMask = btnMask and 1.inv()
-                                hid()?.sendReport(btnMask, 0, 0, 0)
-                            }, 14)
+                            // tap released before snap landed: keep holding -
+                            // click goes out when PC nails it (or at 450ms)
+                            lmbWantsRelease = true
                         }
                     }
                 }

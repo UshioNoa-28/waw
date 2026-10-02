@@ -17,6 +17,7 @@ from .input_ctrl import (
     mouse_button_down,
     bt_lock_events,
     bt_nail,
+    bt_lmb_held,
     bt_snap_events,
     active_backend,
     close_backend,
@@ -505,6 +506,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     _prev_heads: list = []   # camera-motion estimation from common box shift
     nail_state = False
     snap_until = 0.0         # phone big-button 'lock and fire' window
+    _was_held = False
+    _no_t_since: float | None = None
     snap_click_pending = 0.0
     _dump_t = 0.0
     _dump_next = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
@@ -622,6 +625,10 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         if bt_snap_events():
             snap_until = _nowp + 0.40
         snap_armed = _nowp < snap_until
+        held = bt_lmb_held() or snap_armed
+        if held and not _was_held:
+            engine.reset()
+        _was_held = held
         flips = bt_lock_events()
         if flips:
             lock_on = not lock_on if flips % 2 else lock_on
@@ -632,7 +639,13 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         # nail = safe to fire: either fully latched, or already inside ~half a
         # head width (22px). Early-nail makes on-target clicks instant while
         # big-miss clicks still wait for the snap stroke.
-        _nl = bool(getattr(engine, "is_latched", False)) or (target is not None and dist is not None and dist <= 22.0)
+        if held and target is None:
+            if _no_t_since is None:
+                _no_t_since = _nowp
+        elif _no_t_since is not None:
+            _no_t_since = None
+        _bail = _no_t_since is not None and (_nowp - _no_t_since) > 0.12
+        _nl = bool(getattr(engine, "is_latched", False)) or (target is not None and dist is not None and dist <= 22.0) or _bail
         if _nl != nail_state:
             nail_state = _nl
             bt_nail(_nl)
@@ -712,7 +725,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                         camx = sorted(v[0] for v in vecs)[len(vecs) // 2]
                         camy = sorted(v[1] for v in vecs)[len(vecs) // 2]
                 _prev_heads = cur_h
-                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy)) if dist > cfg.min_move else (0, 0)
+                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy)) if (dist > cfg.min_move and held) else (0, 0)
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
                     trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3])

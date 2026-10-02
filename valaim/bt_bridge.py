@@ -70,6 +70,7 @@ class BtBridge:
         self._sent_buttons = 0
         self._dirty = False
         self._flips = 0
+        self._lmb = False
         self._nail = -1   # -1 unknown, 0/1 last sent state
 
         self._thread = threading.Thread(target=self._run, name="bt-bridge", daemon=True)
@@ -135,7 +136,13 @@ class BtBridge:
                 buf += data
                 while b"\n" in buf:
                     line, _, buf = buf.partition(b"\n")
-                    if line.strip() == b"L":
+                    if line.strip() == b"L1":
+                        with self._lock:
+                            self._lmb = True
+                    elif line.strip() == b"L0":
+                        with self._lock:
+                            self._lmb = False
+                    elif line.strip() == b"L":
                         with self._lock:
                             self._flips += 1
                     elif line.strip() == b"T":
@@ -166,6 +173,10 @@ class BtBridge:
             n = getattr(self, "_snap", 0)
             self._snap = 0
             return n
+
+    def lmb_held(self) -> bool:
+        with self._lock:
+            return bool(getattr(self, "_lmb", False))
 
     def pop_lock_flips(self) -> int:
         with self._lock:

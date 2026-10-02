@@ -261,6 +261,16 @@ def bt_snap_events() -> int:
     return 0
 
 
+def bt_lmb_held() -> bool:
+    """Phone reports the user is holding left mouse (proxy gate)."""
+    if _BT is not None:
+        try:
+            return bool(_BT.lmb_held())
+        except Exception:
+            return False
+    return False
+
+
 def bt_nail(on: bool) -> None:
     """Tell the phone whether the crosshair is nailed (mouse-proxy LMB gate)."""
     if _BT is not None:
