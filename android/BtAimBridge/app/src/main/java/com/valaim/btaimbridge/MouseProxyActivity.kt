@@ -20,7 +20,7 @@ import androidx.appcompat.app.AppCompatActivity
  */
 class MouseProxyActivity : AppCompatActivity() {
 
-    private val graceMs = 80L
+    private val graceMs = 140L
     private lateinit var out: TextView
     private val handler = Handler(Looper.getMainLooper())
 
