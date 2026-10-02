@@ -41,6 +41,12 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     @Volatile private var pressAt = 0L
     private val graceMs = 140L
     private var reports = 0
+    @Volatile private var dxOff = 1
+    @Volatile private var dyOff = 2
+    @Volatile private var whOff = 3
+    @Volatile private var btnOff = 0
+    @Volatile private var calibrated = false
+    private val calSamples = ArrayList<ByteArray>()
     private var lastReportAt = 0L
     private var gateNail = 0
     private var gateTimeout = 0
@@ -214,9 +220,14 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             }
             if (n >= 3) {
                 reports++; lastReportAt = System.currentTimeMillis()
-                val buttons = buf[0].toInt()
-                var dx = buf[1].toInt(); var dy = buf[2].toInt()
-                val wheel = if (n >= 4) buf[3].toInt() else 0
+                if (!calibrated) {
+                    calSamples.add(buf.copyOf(n))
+                    if (calSamples.size >= 40) runCalibration()
+                    else { handler.post { render("校准中…请匀速晃晃鼠标 (${calSamples.size}/40)") }; continue }
+                }
+                val buttons = buf[btnOff].toInt() and 0x07
+                var dx = buf[dxOff].toInt(); var dy = buf[dyOff].toInt()
+                val wheel = if (n > whOff) buf[whOff].toInt() else 0
                 // LMB gate
                 val nowLmb = buttons and 0x01 != 0
                 if (nowLmb && !lmbHeld) { lmbHeld = true; pressAt = System.currentTimeMillis() }
@@ -261,11 +272,34 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         }
     }
 
+    private fun runCalibration() {
+        // per-byte signed variance across samples; the two hottest bytes are dx/dy
+        val len = calSamples[0].size
+        val score = DoubleArray(len)
+        for (b in 0 until len) {
+            var mx = 0.0
+            for (s0 in calSamples) mx += s0[b]
+            mx /= calSamples.size
+            var v = 0.0
+            for (s0 in calSamples) { val d = s0[b] - mx; v += d * d }
+            score[b] = if (b == 0) v * 0.2 else v   // byte0 rarely swings = report id bias
+        }
+        val order = score.indices.sortedByDescending { score[it] }
+        val hot = order.take(2).sorted()
+        dxOff = hot[0]; dyOff = hot[1]
+        btnOff = (hot[0] - 1).coerceAtLeast(0)
+        whOff = (hot[1] + 1).coerceAtMost(len - 1)
+        calibrated = true
+        CrashLog.log("calibrated btn=$btnOff dx=$dxOff dy=$dyOff wheel=$whOff bytes=$len")
+        handler.post { render("校准完成 dx@$dxOff dy@$dyOff 键@$btnOff") }
+    }
+
     private fun render(extra: String = "") {
         val age: Double = if (lastReportAt == 0L) -1.0 else (System.currentTimeMillis() - lastReportAt) / 1000.0
         out.text = buildString {
             appendLine("USB 鼠标代理 (boot-protocol 直读)")
             appendLine("报文: $reports (最近 ${if (age < 0) "-" else String.format("%.1f", age) + "s 前"})")
+            appendLine(if (calibrated) "校准: 键@$btnOff dx@$dxOff dy@$dyOff" else "未校准:晃鼠标")
             appendLine("左键: ${if (lmbHeld) "按住" else "-"} 已放行(钉住$gateNail/超时$gateTimeout)")
             appendLine("PC 连接: ${if (BridgeGlobals.clientAlive()) "在线" else "离线"}")
             if (extra.isNotEmpty()) appendLine(extra)
