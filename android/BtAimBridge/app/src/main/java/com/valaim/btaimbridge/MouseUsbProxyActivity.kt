@@ -64,6 +64,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32) }
         setContentView(out)
+        CrashLog.log("USB proxy onCreate enter")
         try {
             usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val flags = if (android.os.Build.VERSION.SDK_INT >= 33) Context.RECEIVER_NOT_EXPORTED else 0
@@ -72,8 +73,10 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             render()
             autoPick()
         } catch (e: Exception) {
+            CrashLog.log("USB proxy init fail: ${e}")
             render("启动失败: ${e.javaClass.simpleName}: ${e.message}")
         }
+        CrashLog.log("USB proxy onCreate exit ok")
     }
 
     override fun onDestroy() {
@@ -115,6 +118,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
 
     private fun autoPick0() {
         val mice = hidMice()
+        CrashLog.log("hidMice found: ${mice.size}")
         if (mice.isEmpty()) { render("没找到 USB 鼠标(boot-protocol)。插好 OTG 后再开本页。"); return }
         val d = mice[0]
         val mgr = usbManager ?: return
@@ -150,6 +154,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         // idle=0 => always deliver; report descriptor says size, use 8 and clamp
         c.controlTransfer(0x21, 0x0A, 0, 0, null, 0, 100)
         polling = true
+        CrashLog.log("claimed ok, polling thread start")
         thread(name = "usb-mouse") { pollLoop(c, itf) }
         render("USB 鼠标已接管: ${dev.vendorId.toString(16)}:${dev.productId.toString(16)}")
     }

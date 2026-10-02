@@ -10,6 +10,8 @@ import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
+import java.io.File
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -44,6 +46,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashLog.init(this)
+        CrashLog.log("MainActivity created")
         setContentView(R.layout.activity_main)
 
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
