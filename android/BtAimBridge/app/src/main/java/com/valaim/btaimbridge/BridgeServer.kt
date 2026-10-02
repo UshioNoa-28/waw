@@ -115,8 +115,12 @@ class BridgeServer(
                     thread(name = "bridge-client") { handleClient(incoming) }
                 }
             } catch (e: Exception) {
-                if (running) onLog("Server error: ${e.message}")
-                try { Thread.sleep(1000) } catch (_: InterruptedException) {}
+                if (running) onLog("Server error: ${e.message}; rebinding")
+                serverSocket?.let { try { it.close() } catch (_: Exception) {} }
+                serverSocket = null
+                try { client?.close() } catch (_: Exception) {}
+                client = null
+                try { Thread.sleep(500) } catch (_: InterruptedException) {}
             }
         }
     }
