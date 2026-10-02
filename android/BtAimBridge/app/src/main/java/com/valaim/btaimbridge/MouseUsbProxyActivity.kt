@@ -116,7 +116,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         usbManager?.deviceList?.values?.forEach { d ->
             for (i in 0 until d.interfaceCount) {
                 val itf = d.getInterface(i)
-                if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceSubclass == 1) {
+                if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceSubclass == 1 && hasInEp(itf)) {
                     list.add(d); return@forEach
                 }
             }
@@ -145,12 +145,20 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         open(d)
     }
 
+    private fun hasInEp(itf: UsbInterface): Boolean {
+        for (i in 0 until itf.endpointCount) {
+            val e = itf.getEndpoint(i)
+            if (e.type == UsbConstants.USB_ENDPOINT_XFER_INT && e.direction == UsbConstants.USB_DIR_IN) return true
+        }
+        return false
+    }
+
     private fun findBootInterface(dev: UsbDevice): UsbInterface? {
         var anyMouse: UsbInterface? = null
         for (i in 0 until dev.interfaceCount) {
             val itf = dev.getInterface(i)
-            if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceSubclass == 1) {
-                if (itf.interfaceProtocol == 2) return itf   // boot-mouse preferred
+            if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceSubclass == 1 && hasInEp(itf)) {
+                if (itf.interfaceProtocol == 2) return itf
                 if (anyMouse == null) anyMouse = itf
             }
         }
@@ -178,11 +186,13 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     }
 
     private fun pollLoop(c: UsbDeviceConnection, itf: UsbInterface) {
-        var ep = itf.getEndpoint(0)
+        try {
+        var ep: android.hardware.usb.UsbEndpoint? = null
         for (i in 0 until itf.endpointCount) {
             val e = itf.getEndpoint(i)
             if (e.type == UsbConstants.USB_ENDPOINT_XFER_INT && e.direction == UsbConstants.USB_DIR_IN) { ep = e; break }
         }
+        if (ep == null) { CrashLog.log("no IN endpoint"); handler.post { render("该鼠标无输入端点,换页或换鼠标") }; return }
         val buf = ByteArray(if (ep.maxPacketSize > 0) ep.maxPacketSize else 8)
         while (polling) {
             val n = c.bulkTransfer(ep, buf, buf.size, 200)
@@ -229,6 +239,10 @@ class MouseUsbProxyActivity : AppCompatActivity() {
                 Thread.sleep(200)
             }
         }
+        } catch (e: Exception) {
+            CrashLog.log("pollLoop died: ${e.javaClass.simpleName}: ${e.message}")
+            handler.post { render("读取线程异常: ${e.javaClass.simpleName}") }
+        }
     }
 
     private fun render(extra: String = "") {
@@ -239,6 +253,8 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             appendLine("左键: ${if (lmbHeld) "按住" else "-"} 已放行(钉住$gateNail/超时$gateTimeout)")
             appendLine("PC 连接: ${if (BridgeGlobals.clientAlive()) "在线" else "离线"}")
             if (extra.isNotEmpty()) appendLine(extra)
+            appendLine("---- 诊断 ----")
+            appendLine(CrashLog.tail(3))
         }
         handler.postDelayed({ if (!isFinishing) render() }, 500)
     }
