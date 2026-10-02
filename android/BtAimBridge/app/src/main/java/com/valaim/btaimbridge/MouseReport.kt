@@ -46,7 +46,7 @@ object MouseReport {
         0xC0.toByte(),                      // End Collection
 
         // vendor control channel: report id 1, 8-byte input + output frames
-        0x05.toByte(), 0x00.toByte(), 0xFF.toByte(),  // Usage Page (Vendor 0xFF00)
+        0x04.toByte(), 0x00.toByte(), 0xFF.toByte(),  // Usage Page (Vendor 0xFF00) - 16-bit page item
         0x09.toByte(), 0x01.toByte(),       // Usage (1)
         0xA1.toByte(), 0x01.toByte(),       // Collection (Application)
         0x85.toByte(), 0x01.toByte(),       //   Report ID (1)
