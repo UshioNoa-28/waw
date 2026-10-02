@@ -19,6 +19,7 @@ from .input_ctrl import (
     bt_nail,
     bt_lmb_held,
     bt_send_line,
+    bt_pop_ping_rtt,
     bt_armed,
     bt_snap_events,
     active_backend,
