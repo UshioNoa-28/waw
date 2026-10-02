@@ -94,7 +94,9 @@ class BridgeServer(
         while (running) {
             val port = portProvider()
             try {
-                val ss = ServerSocket(port)
+                val ss = ServerSocket()
+                    ss.reuseAddress = true
+                    ss.bind(java.net.InetSocketAddress(port))
                 serverSocket = ss
                 onLog("Listening on 0.0.0.0:$port")
                 while (running) {

@@ -52,13 +52,24 @@ class MouseProxyActivity : AppCompatActivity() {
         out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32); isFocusableInTouchMode = true; requestFocus() }
         setContentView(out)
         out.post { try { out.requestPointerCapture() } catch (_: Exception) { } }
+        handler.post(keepCapture)
         handler.post(tick)
     }
 
     override fun onDestroy() {
         handler.removeCallbacks(tick)
+        handler.removeCallbacks(keepCapture)
         if (lmbDownSent) { btnMask = btnMask and 1.inv(); hid()?.sendReport(btnMask, 0, 0, 0) }
         super.onDestroy()
+    }
+
+    private val keepCapture = object : Runnable {
+        override fun run() {
+            if (!captureAlive()) {
+                try { out.requestPointerCapture() } catch (_: Exception) { }
+            }
+            handler.postDelayed(this, 150)
+        }
     }
 
     private fun hid() = BridgeGlobals.hid

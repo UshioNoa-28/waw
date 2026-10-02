@@ -136,6 +136,11 @@ class MainActivity : AppCompatActivity() {
     private fun setStatus(s: String) = main.post { tvStatus.text = s }
 
     private fun requestThenStart() {
+        if (BridgeGlobals.server != null && running) {
+            // lifecycle re-create (rotation/process warmup) - keep the existing server,
+            // re-binding a second one is what caused the mid-session bind failures
+            return
+        }
         val need = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             need += Manifest.permission.BLUETOOTH_CONNECT
