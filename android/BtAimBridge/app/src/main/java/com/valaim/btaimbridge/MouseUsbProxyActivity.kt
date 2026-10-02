@@ -131,7 +131,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         if (!c.claimInterface(itf, true)) { render("claimInterface 被拒(可能被系统指针进程占用)"); c.close(); return }
         conn = c; claimed = itf
         // idle=0 => always deliver; report descriptor says size, use 8 and clamp
-        c.controlRequestToInterface(itf, 0x21.toByte(), 0x0A, 0, 0, 0, null, 100)
+        c.controlTransfer(0x21, 0x0A, 0, 0, null, 0, 100)
         polling = true
         thread(name = "usb-mouse") { pollLoop(c, itf) }
         render("USB 鼠标已接管: ${dev.vendorId.toString(16)}:${dev.productId.toString(16)}")
@@ -192,7 +192,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     }
 
     private fun render(extra: String = "") {
-        val age = if (lastReportAt == 0L) -1 else (System.currentTimeMillis() - lastReportAt) / 1000.0
+        val age: Double = if (lastReportAt == 0L) -1.0 else (System.currentTimeMillis() - lastReportAt) / 1000.0
         out.text = buildString {
             appendLine("USB 鼠标代理 (boot-protocol 直读)")
             appendLine("报文: $reports (最近 ${if (age < 0) "-" else String.format("%.1f", age) + "s 前"})")
