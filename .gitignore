@@ -21,3 +21,5 @@ distill_data/
 # analysis reports
 *_report*.txt
 push.log
+ValAim.tar.gz
+*.csv
