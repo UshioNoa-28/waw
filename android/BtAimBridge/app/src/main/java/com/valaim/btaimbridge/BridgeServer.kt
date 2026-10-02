@@ -34,6 +34,9 @@ class BridgeServer(
     private var worker: Thread? = null
 
     @Volatile private var client: Socket? = null
+    /** PC-side latch state, drives the mouse-proxy left-button gate. */
+    @Volatile var nailOk: Boolean = false
+    var onNail: ((Boolean) -> Unit)? = null
     @Volatile private var buttonMask = 0
 
     // Coalesced, rate-paced move output: the PC can burst commands faster
@@ -177,6 +180,10 @@ class BridgeServer(
                 hid.sendReport(buttonMask, 0, 0, step)
             }
             "P" -> { /* keepalive */ }
+            "N" -> {
+                val on = (parts.getOrNull(1)?.toIntOrNull() ?: 0) != 0
+                if (on != nailOk) { nailOk = on; onNail?.invoke(on) }
+            }
         }
     }
 }

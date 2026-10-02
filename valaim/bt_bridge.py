@@ -69,6 +69,7 @@ class BtBridge:
         self._sent_buttons = 0
         self._dirty = False
         self._flips = 0
+        self._nail = -1   # -1 unknown, 0/1 last sent state
 
         self._thread = threading.Thread(target=self._run, name="bt-bridge", daemon=True)
         self._thread.start()
@@ -139,6 +140,15 @@ class BtBridge:
         except OSError:
             pass
 
+    def set_nail(self, on: bool) -> None:
+        v = 1 if on else 0
+        with self._cond:
+            if v == self._nail:
+                return
+            self._nail = v
+            self._dirty = True
+            self._cond.notify_all()
+
     def pop_lock_flips(self) -> int:
         with self._lock:
             n, self._flips = self._flips, 0
@@ -155,6 +165,8 @@ class BtBridge:
                 sock = self._sock
                 lines: list[str] = []
                 if self._dirty:
+                    if self._nail >= 0:
+                        lines.append(f"N {self._nail}")
                     if self._buttons != self._sent_buttons:
                         lines.append(f"B {self._buttons & 0x1F}")
                         self._sent_buttons = self._buttons

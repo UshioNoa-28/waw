@@ -36,6 +36,10 @@
             android:foregroundServiceType="connectedDevice" />
 
             <activity
+            android:name=".MouseProxyActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".MouseTestActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

@@ -251,6 +251,15 @@ _MOUSE_VK = {
 }
 
 
+def bt_nail(on: bool) -> None:
+    """Tell the phone whether the crosshair is nailed (mouse-proxy LMB gate)."""
+    if _BT is not None:
+        try:
+            _BT.set_nail(on)
+        except Exception:
+            pass
+
+
 def bt_lock_events() -> int:
     """Number of lock-toggle presses received from the phone app."""
     if _BT is not None:

@@ -16,6 +16,7 @@ from .input_ctrl import (
     foreground_process,
     mouse_button_down,
     bt_lock_events,
+    bt_nail,
     active_backend,
     close_backend,
     key_state,
@@ -501,6 +502,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     det_cache = None
     grab_ms = infer_ms = 0.0
     _prev_heads: list = []   # camera-motion estimation from common box shift
+    nail_state = False
     _dump_t = 0.0
     _dump_next = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
     trace = None
@@ -612,6 +614,10 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             active = False
             gate_note = "锁定OFF - 手机按[锁定]恢复"
         target = selector.select(detections, cursor) if active else None
+        _nl = bool(getattr(engine, "is_latched", False))
+        if _nl != nail_state:
+            nail_state = _nl
+            bt_nail(_nl)
         if trace is not None:
             _nh = sum(1 for d in detections if "head" in d.name.lower())
             _nb = sum(1 for d in detections if "body" in d.name.lower())

@@ -89,6 +89,12 @@
             android:text="锁定: ON (点这里开关)" />
 
         <Button
+            android:id="@+id/btnMouseProxy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="鼠标代理 (OTG 鼠标→手机→电脑)" />
+
+        <Button
             android:id="@+id/btnMouseTest"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
