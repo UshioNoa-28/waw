@@ -17,3 +17,7 @@ android/BtAimBridge/local.properties
 image.png
 opencode.json
 distill_data/
+
+# analysis reports
+*_report*.txt
+push.log
