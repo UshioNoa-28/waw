@@ -63,6 +63,8 @@ class MouseProxyActivity : AppCompatActivity() {
 
     private fun hid() = BridgeGlobals.hid
 
+    private fun captureAlive(): Boolean = try { out.hasPointerCapture() } catch (_: Exception) { false }
+
     private val tick = object : Runnable {
         override fun run() {
             val h = hid()
