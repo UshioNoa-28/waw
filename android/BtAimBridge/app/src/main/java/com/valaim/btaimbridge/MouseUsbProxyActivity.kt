@@ -64,7 +64,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32) }
         CrashLog.log("USB proxy onCreate enter")
-        row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
         row.addView(out, android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         val btn = android.widget.Button(this).apply { text = "开始接管鼠标" }
