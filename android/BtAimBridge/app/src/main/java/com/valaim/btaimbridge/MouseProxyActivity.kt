@@ -42,39 +42,20 @@ class MouseProxyActivity : AppCompatActivity() {
 
     override fun onUserLeaveHint() { super.onUserLeaveHint() }
 
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        try { out.requestPointerCapture() } catch (_: Exception) { }
-        return super.onTouchEvent(event)
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32); isFocusableInTouchMode = true; requestFocus() }
         setContentView(out)
-        out.post { try { out.requestPointerCapture() } catch (_: Exception) { } }
-        handler.post(keepCapture)
-        handler.post(tick)
+                handler.post(tick)
     }
 
     override fun onDestroy() {
         handler.removeCallbacks(tick)
-        handler.removeCallbacks(keepCapture)
         if (lmbDownSent) { btnMask = btnMask and 1.inv(); hid()?.sendReport(btnMask, 0, 0, 0) }
         super.onDestroy()
     }
 
-    private val keepCapture = object : Runnable {
-        override fun run() {
-            if (!captureAlive()) {
-                try { out.requestPointerCapture() } catch (_: Exception) { }
-            }
-            handler.postDelayed(this, 150)
-        }
-    }
-
     private fun hid() = BridgeGlobals.hid
-
-    private fun captureAlive(): Boolean = try { out.hasPointerCapture() } catch (_: Exception) { false }
 
     private val tick = object : Runnable {
         override fun run() {
@@ -116,7 +97,7 @@ class MouseProxyActivity : AppCompatActivity() {
 
     private fun render() {
         out.text = buildString {
-            appendLine("鼠标代理运行中   指针捕捉: ${if (captureAlive()) "ON" else "!! OFF - 点一下屏幕 !!"}")
+            appendLine("鼠标代理运行中(纯中转版,无指针捕捉)")
             appendLine("移动转发 $moves 帧 | 扣左键: 钉住放 $nails / 超时放 $holds")
             appendLine("左键状态: ${if (lmbHeld) if (lmbDownSent) "已放行" else "扣住等待钉住…" else "无"}")
             appendLine("PC 钉住信号: ${BridgeGlobals.server?.nailOk}")
@@ -128,15 +109,12 @@ class MouseProxyActivity : AppCompatActivity() {
         if (!ev.isFromSource(InputDevice.SOURCE_MOUSE)) return super.dispatchGenericMotionEvent(ev)
         when (ev.actionMasked) {
             MotionEvent.ACTION_MOVE, MotionEvent.ACTION_HOVER_MOVE -> {
-                // captured pointer => true relative deltas (no screen clamp)
-                var dx = ev.getAxisValue(MotionEvent.AXIS_RELATIVE_X).toInt()
-                var dy = ev.getAxisValue(MotionEvent.AXIS_RELATIVE_Y).toInt()
-                if (dx == 0 && dy == 0) {
-                    val x = ev.getAxisValue(MotionEvent.AXIS_X)
-                    val y = ev.getAxisValue(MotionEvent.AXIS_Y)
-                    if (lastX >= 0f) { dx = (x - lastX).toInt(); dy = (y - lastY).toInt() }
-                    lastX = x; lastY = y
-                }
+                val x = ev.getAxisValue(MotionEvent.AXIS_X)
+                val y = ev.getAxisValue(MotionEvent.AXIS_Y)
+                var dx = 0
+                var dy = 0
+                if (lastX >= 0f) { dx = (x - lastX).toInt(); dy = (y - lastY).toInt() }
+                lastX = x; lastY = y
                 if (kotlin.math.abs(dx) < 400 && kotlin.math.abs(dy) < 400 && (dx != 0 || dy != 0)) {
                     pendX += dx; pendY += dy; moves++
                 }

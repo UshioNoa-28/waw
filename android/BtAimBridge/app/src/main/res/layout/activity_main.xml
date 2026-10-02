@@ -101,7 +101,7 @@
             android:id="@+id/btnMouseProxy"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="USB 鼠标代理 (推荐: 直读鼠标)" />
+            android:text="鼠标代理 (推荐: 竖屏中转+左键拦截)" />
 
         <Button
             android:id="@+id/btnMouseTest"

@@ -178,7 +178,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         if (!c.claimInterface(itf, true)) { render("claimInterface 被拒(可能被系统指针进程占用)"); c.close(); return }
         conn = c; claimed = itf
         // idle=0 => always deliver; report descriptor says size, use 8 and clamp
-        c.controlTransfer(0x21, 0x0A, 0, 0, null, 0, 100)
+        c.controlTransfer(0x21, 0x0A, 0, 0, ByteArray(0), 0, 100)
         polling = true
         CrashLog.log("claimed ok, polling thread start")
         thread(name = "usb-mouse") { pollLoop(c, itf) }
