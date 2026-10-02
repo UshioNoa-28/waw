@@ -45,6 +45,7 @@ class HidMouseController(
 
     @Volatile private var registered = false
     @Volatile private var connected = false
+    @Volatile private var vendorSeen = false
 
     val isReady: Boolean get() = connected
 
