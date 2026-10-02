@@ -629,9 +629,14 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             snap_until = _nowp + 0.40
         snap_armed = _nowp < snap_until
         held = bt_lmb_held() or snap_armed
-        if held and not _was_held:
-            engine.reset()
-            _press_shot_until = _nowp + 0.20
+        if held != _was_held:
+            print(f"[lmb] {'DOWN' if held else 'UP'}")
+            if trace is not None:
+                trace.writerow(["lmb", round(_nowp - t0, 4), 1 if held else 0])
+                trace_f.flush()
+            if held:
+                engine.reset()
+                _press_shot_until = _nowp + 0.20
         _was_held = held
         flips = bt_lock_events()
         if flips:

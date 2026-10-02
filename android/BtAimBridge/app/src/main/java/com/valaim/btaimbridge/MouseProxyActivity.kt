@@ -33,6 +33,7 @@ class MouseProxyActivity : AppCompatActivity() {
     @Volatile private var lastY = -1f
 
     @Volatile private var lmbHeld = false
+    @Volatile private var l1Sent = 0
     @Volatile private var lmbDownSent = false
     @Volatile private var lmbWantsRelease = false
     @Volatile private var pressAt = 0L
@@ -116,6 +117,7 @@ class MouseProxyActivity : AppCompatActivity() {
         out.text = buildString {
             appendLine("鼠标代理运行中(纯中转版,无指针捕捉)")
             appendLine("移动转发 $moves 帧 | 扣左键: 钉住放 $nails / 超时放 $holds")
+            appendLine("L1已发: $l1Sent")
             appendLine("左键状态: ${if (lmbHeld) if (lmbDownSent) "已放行" else "扣住等待钉住…" else "无"}")
             appendLine("PC 辅助: ${if (BridgeGlobals.server?.assistOn == true) "就绪(扣左键等吸附)" else "未开(左键直通)"} 钉住: ${BridgeGlobals.server?.nailOk}")
             append("移动即时转发,左键最多等 ${graceMs}ms")
@@ -145,10 +147,13 @@ class MouseProxyActivity : AppCompatActivity() {
                     if (press) {
                         lmbHeld = true; pressAt = System.currentTimeMillis()
                         BridgeGlobals.server?.sendLmb(true)
+                        l1Sent++
+                        com.valaim.btaimbridge.CrashLog.log("sent L1 #$l1Sent assist=${BridgeGlobals.server?.assistOn}")
                     }
                     else {
                         lmbHeld = false
                         BridgeGlobals.server?.sendLmb(false)
+                        CrashLog.log("sent L0")
                         if (lmbDownSent) {
                             lmbDownSent = false
                             btnMask = btnMask and 1.inv()
