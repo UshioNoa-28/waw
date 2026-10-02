@@ -153,11 +153,11 @@ class MouseProxyActivity : AppCompatActivity() {
                 // canonical per-event button identity (state-diff guessing lost
                 // releases on some mice -> phantom held -> every later click
                 // invisible to the game = the random swallowing)
-                val primary = ev.actionButton == MotionEvent.BUTTON_PRIMARY ||
-                    (ev.actionMasked == MotionEvent.ACTION_BUTTON_PRESS && ev.buttonState and MotionEvent.BUTTON_PRIMARY != 0) ||
-                    (ev.actionMasked == MotionEvent.ACTION_BUTTON_RELEASE && ev.buttonState and MotionEvent.BUTTON_PRIMARY != 0)
                 val press = ev.actionMasked == MotionEvent.ACTION_BUTTON_PRESS
-                trackedButtons = ev.buttonState
+                val state = ev.buttonState.toInt()
+                val diff = if (press) state and trackedButtons.inv() else trackedButtons and state.inv()
+                trackedButtons = state
+                val primary = ev.actionButton == MotionEvent.BUTTON_PRIMARY || (diff and MotionEvent.BUTTON_PRIMARY != 0)
                 if (primary) {
                     if (press) {
                         if (!lmbHeld && lmbWantsRelease && !lmbDownSent) {
