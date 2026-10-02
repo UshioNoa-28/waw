@@ -660,6 +660,9 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         if _nl != nail_state:
             nail_state = _nl
             bt_nail(_nl)
+            if trace is not None:
+                trace.writerow(["nail", round(_nowp - t0, 4), 1 if _nl else 0])
+                trace_f.flush()
         if snap_armed and _nl:
             from .bt_bridge import BTN_LEFT
             bridge = None
@@ -764,6 +767,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                                         round(d.w, 2), round(d.h, 2), round(d.conf, 3), d.name])
                     if mx or my:
                         trace.writerow(["cmd", tt, mx, my])
+                trace_f.flush()
                 if mx or my:
                     move_mouse(mx, my)
                     action = f"move {mx:+d},{my:+d}"
