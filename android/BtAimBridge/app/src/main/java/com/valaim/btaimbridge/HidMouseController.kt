@@ -335,7 +335,7 @@ class HidMouseController(
         val dev = hostDevice ?: return false
         val report = MouseReport.build(buttons, dx, dy, wheel)
         return try {
-            hidDevice?.sendReport(dev, 0, report) ?: false
+            hidDevice?.sendReport(dev, 2, report) ?: false
         } catch (_: SecurityException) {
             false
         }
