@@ -37,11 +37,12 @@
 
             <activity
             android:name=".MouseUsbProxyActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="keyboard|keyboardHidden|navigation|uiMode|orientation|screenSize|screenLayout|smallestScreenSize" />
         <activity
             android:name=".MouseProxyActivity"
             android:exported="false"
-            android:screenOrientation="portrait" />
+            android:configChanges="keyboard|keyboardHidden|navigation|uiMode|orientation|screenSize|screenLayout|smallestScreenSize" />
         <activity
             android:name=".MouseTestActivity"
             android:exported="false"

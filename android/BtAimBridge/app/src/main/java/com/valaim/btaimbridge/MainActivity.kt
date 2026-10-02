@@ -73,20 +73,11 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "无法打开蓝牙设置", Toast.LENGTH_SHORT).show()
             }
         }
-        findViewById<Button>(R.id.btnFireSnap).setOnTouchListener { v, ev ->
-            when (ev.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> server?.sendTrigger()
-            }
-            v.performClick(); false
-        }
         findViewById<Button>(R.id.btnMouseProxy).setOnClickListener {
             try { startActivity(android.content.Intent(this, MouseUsbProxyActivity::class.java)) }
             catch (e: Exception) { setStatus("打开代理页失败: ${e.javaClass.simpleName} ${e.message}") }
         }
-        findViewById<Button>(R.id.btnMouseTest).setOnClickListener {
-            startActivity(android.content.Intent(this, MouseTestActivity::class.java))
-        }
-        findViewById<Button>(R.id.btnLock).setOnClickListener {
+                findViewById<Button>(R.id.btnLock).setOnClickListener {
             server?.sendLockToggle()
             Toast.makeText(this, "已发送锁定切换", Toast.LENGTH_SHORT).show()
         }

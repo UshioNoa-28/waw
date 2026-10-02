@@ -89,27 +89,12 @@
             android:text="锁定: ON (点这里开关)" />
 
         <Button
-            android:id="@+id/btnFireSnap"
-            android:layout_width="match_parent"
-            android:layout_height="72dp"
-            android:text="🎯 锁头开枪"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:backgroundTint="#b91c1c" />
-
-        <Button
             android:id="@+id/btnMouseProxy"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="鼠标代理 (推荐: 竖屏中转+左键拦截)" />
+            android:text="鼠标代理 (左键拦截-吸附-开枪)" />
 
-        <Button
-            android:id="@+id/btnMouseTest"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="鼠标代理测试 (读鼠标事件)" />
-
-        <Button
+<Button
             android:id="@+id/btnDiscover"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
