@@ -660,6 +660,13 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             except Exception:
                 pass
             snap_until = 0.0
+        _frames_flush = getattr(main_run, "_fr", 0) + 1
+        main_run._fr = _frames_flush
+        if trace is not None and _frames_flush % 40 == 0:
+            try:
+                trace_f.flush()
+            except Exception:
+                pass
         if trace is not None:
             _nh = sum(1 for d in detections if "head" in d.name.lower())
             _nb = sum(1 for d in detections if "body" in d.name.lower())
@@ -728,7 +735,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy)) if (dist > cfg.min_move and held) else (0, 0)
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
-                    trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3])
+                    trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3], 1 if held else 0)
                 if cfg.aim_off:
                     mx = my = 0
                 if trace is not None:
