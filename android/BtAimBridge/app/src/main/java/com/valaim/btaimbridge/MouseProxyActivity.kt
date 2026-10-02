@@ -142,6 +142,7 @@ class MouseProxyActivity : AppCompatActivity() {
                     btnMask = if (press) btnMask or 0x04 else btnMask and 0x04.inv()
                     hid()?.sendReport(btnMask, 0, 0, 0)
                 }
+            }
         }
         val vs = ev.getAxisValue(MotionEvent.AXIS_VSCROLL).toInt()
         if (vs != 0) pendWheel += vs
