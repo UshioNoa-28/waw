@@ -116,7 +116,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         usbManager?.deviceList?.values?.forEach { d ->
             for (i in 0 until d.interfaceCount) {
                 val itf = d.getInterface(i)
-                if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceProtocol == 2) {
+                if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceSubclass == 1) {
                     list.add(d); return@forEach
                 }
             }
@@ -133,7 +133,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     private fun autoPick0() {
         val mice = hidMice()
         CrashLog.log("hidMice found: ${mice.size}")
-        if (mice.isEmpty()) { render("没找到 USB 鼠标(boot-protocol)。插好 OTG 后再开本页。"); return }
+        if (mice.isEmpty()) { render("没找到 USB 鼠标。检查: OTG开关已开? 鼠标插在hub的A口? 重新点一次。"); return }
         val d = mice[0]
         val mgr = usbManager ?: return
         if (!mgr.hasPermission(d)) {
@@ -146,11 +146,15 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     }
 
     private fun findBootInterface(dev: UsbDevice): UsbInterface? {
+        var anyMouse: UsbInterface? = null
         for (i in 0 until dev.interfaceCount) {
             val itf = dev.getInterface(i)
-            if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceProtocol == 2) return itf
+            if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceSubclass == 1) {
+                if (itf.interfaceProtocol == 2) return itf   // boot-mouse preferred
+                if (anyMouse == null) anyMouse = itf
+            }
         }
-        return null
+        return anyMouse
     }
 
     private fun open(dev: UsbDevice) {

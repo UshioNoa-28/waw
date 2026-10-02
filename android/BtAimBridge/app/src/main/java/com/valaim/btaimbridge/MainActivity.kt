@@ -146,7 +146,7 @@ class MainActivity : AppCompatActivity() {
     private fun setStatus(s: String) = main.post { tvStatus.text = s }
 
     private fun requestThenStart() {
-        if (BridgeGlobals.server != null && running) {
+        if (BridgeGlobals.server != null) {
             // lifecycle re-create (rotation/process warmup) - keep the existing server,
             // re-binding a second one is what caused the mid-session bind failures
             return

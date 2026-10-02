@@ -37,12 +37,10 @@
 
             <activity
             android:name=".MouseUsbProxyActivity"
-            android:exported="false"
-            android:screenOrientation="sensorLandscape" />
+            android:exported="false" />
         <activity
             android:name=".MouseProxyActivity"
-            android:exported="false"
-            android:screenOrientation="sensorLandscape" />
+            android:exported="false" />
         <activity
             android:name=".MouseTestActivity"
             android:exported="false"
