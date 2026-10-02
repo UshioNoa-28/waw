@@ -77,7 +77,7 @@ class MouseProxyActivity : AppCompatActivity() {
                                 val up = btnMask and 1.inv()
                                 btnMask = up
                                 hid()?.sendReport(up, 0, 0, 0)
-                            }, 20)
+                            }, 60)
                         }
                     } else {
                         val nailed = BridgeGlobals.server?.nailOk == true
@@ -91,7 +91,7 @@ class MouseProxyActivity : AppCompatActivity() {
                                 handler.postDelayed({
                                     btnMask = btnMask and 1.inv()
                                     hid()?.sendReport(btnMask, 0, 0, 0)
-                                }, 15)
+                                }, 60)
                             }
                         }
                     }
@@ -155,7 +155,7 @@ class MouseProxyActivity : AppCompatActivity() {
                                 val up = btnMask and 1.inv()
                                 btnMask = up
                                 hid()?.sendReport(up, 0, 0, 0)
-                            }, 20)
+                            }, 60)
                             lmbWantsRelease = false
                             holds++
                         }
