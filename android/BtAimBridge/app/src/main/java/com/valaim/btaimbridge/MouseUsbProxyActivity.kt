@@ -72,6 +72,12 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         row.addView(btn, android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
+        if (!::fallbackBtn.isInitialized) { }
+        val fb = android.widget.Button(this).apply { text = "退回中转模式(边界受限但更兼容)" }
+        fb.setOnClickListener { startActivity(android.content.Intent(this@MouseUsbProxyActivity, com.valaim.btaimbridge.MouseProxyActivity::class.java)) }
+        row.addView(fb, android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(row)
     }
 
@@ -85,6 +91,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     }
 
     private var inited = false
+    private var fallbackBtn: android.widget.Button? = null
 
     private fun safeInit() {
         if (inited) return
@@ -174,11 +181,15 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     private fun open0(dev: UsbDevice) {
         val itf = findBootInterface(dev) ?: run { render("设备无 boot-protocol HID 接口: ${dev.deviceName}"); return }
         val mgr = usbManager ?: return
+        CrashLog.log("usb step: openDevice?")
         val c = mgr.openDevice(dev) ?: run { render("openDevice 失败"); return }
+        CrashLog.log("usb step: claimInterface(force)")
         if (!c.claimInterface(itf, true)) { render("claimInterface 被拒(可能被系统指针进程占用)"); c.close(); return }
+        CrashLog.log("usb step: claimed ok")
         conn = c; claimed = itf
         // idle=0 => always deliver; report descriptor says size, use 8 and clamp
-        c.controlTransfer(0x21, 0x0A, 0, 0, ByteArray(0), 0, 100)
+        try { c.controlTransfer(0x21, 0x0A, 0, 0, ByteArray(0), 0, 100) } catch (_: Exception) { }
+        CrashLog.log("usb step: set_idle sent")
         polling = true
         CrashLog.log("claimed ok, polling thread start")
         thread(name = "usb-mouse") { pollLoop(c, itf) }
@@ -194,8 +205,14 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         }
         if (ep == null) { CrashLog.log("no IN endpoint"); handler.post { render("该鼠标无输入端点,换页或换鼠标") }; return }
         val buf = ByteArray(if (ep.maxPacketSize > 0) ep.maxPacketSize else 8)
+        CrashLog.log("usb step: entering bulk loop (pkt=${buf.size})")
+        var firstLogged = false
         while (polling) {
             val n = c.bulkTransfer(ep, buf, buf.size, 200)
+            if (!firstLogged && n > 0) {
+                firstLogged = true
+                CrashLog.log("usb step: FIRST REPORT n=$n bytes=${buf.take(min(n,6)).joinToString(",")}")
+            }
             if (n >= 3) {
                 reports++; lastReportAt = System.currentTimeMillis()
                 val buttons = buf[0].toInt()

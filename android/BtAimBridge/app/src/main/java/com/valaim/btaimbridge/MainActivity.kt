@@ -80,7 +80,7 @@ class MainActivity : AppCompatActivity() {
             v.performClick(); false
         }
         findViewById<Button>(R.id.btnMouseProxy).setOnClickListener {
-            try { startActivity(android.content.Intent(this, MouseProxyActivity::class.java)) }
+            try { startActivity(android.content.Intent(this, MouseUsbProxyActivity::class.java)) }
             catch (e: Exception) { setStatus("打开代理页失败: ${e.javaClass.simpleName} ${e.message}") }
         }
         findViewById<Button>(R.id.btnMouseTest).setOnClickListener {
