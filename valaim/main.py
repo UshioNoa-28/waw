@@ -44,12 +44,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--crop", type=int, default=640)
     p.add_argument("--monitor", type=int, default=0)
     p.add_argument("--team-guard", action="store_true", help="After latching, verify enemy via red crosshair pixels; ban non-enemy boxes briefly")
-    p.add_argument("--min-head", type=float, default=14.0, help="Ignore targets with head-box narrower than this (px)")
-    p.add_argument("--conf", type=float, default=0.5)
+    p.add_argument("--min-head", type=float, default=10.0, help="Ignore targets with head-box narrower than this (px)")
+    p.add_argument("--conf", type=float, default=0.4)
     p.add_argument("--iou", type=float, default=0.45)
     p.add_argument("--classes", nargs="*", default=["head"])
     p.add_argument("--exclude-classes", nargs="*", default=[])
-    p.add_argument("--fov", type=int, default=300)
+    p.add_argument("--fov", type=int, default=420)
     p.add_argument("--aim-height", type=float, default=0.30)
     p.add_argument("--aim-mode", default="head", choices=["head", "head_wide", "body"])
     p.add_argument("--head-height", type=float, default=0.10)
@@ -513,6 +513,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     _was_held = False
     _press_shot_until = 0.0
     _snap_session_until = 0.0
+    _session_fired = False
     _no_t_since: float | None = None
     _frames_flush = 0
     snap_click_pending = 0.0
@@ -642,6 +643,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 engine.reset()
                 _press_shot_until = _nowp + 0.20
                 _snap_session_until = _nowp + 0.5
+                _session_fired = False
         _was_held = held
         # a tap (down+up in <100ms) must still get the full snap window - the
         # phone holds that shot until nail or timeout, so PC keeps aiming even
@@ -659,12 +661,11 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         # nail = safe to fire: either fully latched, or already inside ~half a
         # head width (22px). Early-nail makes on-target clicks instant while
         # big-miss clicks still wait for the snap stroke.
-        if held_eff and target is None:
-            if _no_t_since is None:
-                _no_t_since = _nowp
-        elif _no_t_since is not None:
-            _no_t_since = None
-        _bail = _no_t_since is not None and (_nowp - _no_t_since) > 0.12
+        # bail: if the session has fired NO stroke within 120ms of the press,
+        # let the shot go immediately - flickering detections must not keep
+        # resetting the timer (that made the phone wait the full 450ms)
+        _sess_age = _nowp - (_snap_session_until - 0.5)
+        _bail = held_eff and not _session_fired and _sess_age > 0.12
         _nl = bool(getattr(engine, "is_latched", False)) or (target is not None and dist is not None and dist <= 22.0) or _bail
         if _nl != nail_state:
             nail_state = _nl
@@ -796,6 +797,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                         trace.writerow(["cmd", tt, mx, my])
                 trace_f.flush()
                 if mx or my:
+                    _session_fired = True
                     move_mouse(mx, my)
                     action = f"move {mx:+d},{my:+d}"
                 else:

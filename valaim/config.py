@@ -15,15 +15,15 @@ class AimConfig:
     crop_size: int = 640
     monitor: int = 0
 
-    conf_threshold: float = 0.5
+    conf_threshold: float = 0.4
     team_guard: bool = False
     red_min_px: int = 6
-    min_head_px: float = 16.0  # ignore targets whose head box is smaller (far = fake-prone)
+    min_head_px: float = 10.0  # ignore targets whose head box is smaller (far = fake-prone)
     iou_threshold: float = 0.45
     target_classes: tuple[str, ...] = field(default_factory=tuple)
     exclude_classes: tuple[str, ...] = field(default_factory=tuple)
 
-    fov_radius: int = 300
+    fov_radius: int = 420
     aim_mode: str = "head"
     aim_height: float = 0.30
     head_height: float = 0.10
