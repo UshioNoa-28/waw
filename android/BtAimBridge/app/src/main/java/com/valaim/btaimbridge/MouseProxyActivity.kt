@@ -52,11 +52,19 @@ class MouseProxyActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(tick)
-        if (lmbDownSent) { btnMask = btnMask and 1.inv(); hid()?.sendReport(btnMask, 0, 0, 0) }
+        if (lmbDownSent) { btnMask = btnMask and 1.inv(); clickReport(btnMask) }
         super.onDestroy()
     }
 
     private fun hid() = BridgeGlobals.hid
+
+    private fun clickReport(mask: Int) {
+        // games reading Raw Input often ignore zero-motion packets: pair the
+        // button-state change with a +1/-1 micro-move (net zero, invisible)
+        val h = hid() ?: return
+        h.sendReport(mask, 1, 0, 0)
+        h.sendReport(mask, -1, 0, 0)
+    }
 
     private var btnMask: Int
         get() = BridgeGlobals.btnMask
@@ -74,7 +82,7 @@ class MouseProxyActivity : AppCompatActivity() {
                         // like an ungated mouse (stay down while held, up on release)
                         btnMask = btnMask or 0x01
                         lmbDownSent = true; lastDownAt = System.currentTimeMillis()
-                        h.sendReport(btnMask, 0, 0, 0)
+                        clickReport(btnMask)
                         if (lmbWantsRelease) {
                             lmbHeld = false; lmbWantsRelease = false
                             handler.postDelayed({
@@ -94,13 +102,13 @@ class MouseProxyActivity : AppCompatActivity() {
                                 lmbHeld = false; lmbWantsRelease = false
                                 handler.postDelayed({
                                     btnMask = btnMask and 1.inv()
-                                    hid()?.sendReport(btnMask, 0, 0, 0)
+                                    clickReport(btnMask)
                                 }, 60)
                             }
                         }
                     }
                 }
-                if (released) h.sendReport(btnMask, 0, 0, 0)
+                if (released) clickReport(btnMask)
                 while (pendX != 0 || pendY != 0) {
                     val cx = pendX.coerceIn(-127, 127)
                     val cy = pendY.coerceIn(-127, 127)
@@ -116,7 +124,7 @@ class MouseProxyActivity : AppCompatActivity() {
                     // phantom stuck: no physical press can still be down this long
                     btnMask = btnMask and 1.inv()
                     lmbDownSent = false
-                    h.sendReport(btnMask, 0, 0, 0)
+                    h.clickReport(btnMask)
                     CrashLog.log("phantom LMB cleared")
                 }
             }
@@ -165,7 +173,7 @@ class MouseProxyActivity : AppCompatActivity() {
                             // first IMMEDIATELY as a plain click (never swallow a
                             // shot), then open a fresh snap window for this tap
                             btnMask = btnMask or 0x01
-                            hid()?.sendReport(btnMask, 0, 0, 0)
+                            clickReport(btnMask)
                             handler.postDelayed({
                                 val up = btnMask and 1.inv()
                                 btnMask = up
@@ -186,7 +194,7 @@ class MouseProxyActivity : AppCompatActivity() {
                         if (lmbDownSent) {
                             lmbDownSent = false
                             btnMask = btnMask and 1.inv()
-                            hid()?.sendReport(btnMask, 0, 0, 0)
+                            clickReport(btnMask)
                         } else {
                             // tap released before snap landed: keep holding -
                             // click goes out when PC nails it (or at 450ms)
@@ -196,11 +204,11 @@ class MouseProxyActivity : AppCompatActivity() {
                 }
                 if (diff and MotionEvent.BUTTON_SECONDARY != 0) {
                     btnMask = if (press) btnMask or 0x02 else btnMask and 0x02.inv()
-                    hid()?.sendReport(btnMask, 0, 0, 0)
+                    clickReport(btnMask)
                 }
                 if (diff and MotionEvent.BUTTON_TERTIARY != 0) {
                     btnMask = if (press) btnMask or 0x04 else btnMask and 0x04.inv()
-                    hid()?.sendReport(btnMask, 0, 0, 0)
+                    clickReport(btnMask)
                 }
             }
         }
