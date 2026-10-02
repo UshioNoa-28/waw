@@ -78,6 +78,16 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         row.addView(btn, android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
+        val rel = android.widget.Button(this).apply { text = "释放鼠标(还给系统)" }
+        rel.setOnClickListener {
+            polling = false
+            try { conn?.close() } catch (_: Exception) {}
+            conn = null; claimed = null
+            render("已释放,鼠标回到手机系统(或退出本页)")
+        }
+        row.addView(rel, android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
         val fb = android.widget.Button(this).apply { text = "退回中转模式(边界受限但更兼容)" }
         fb.setOnClickListener { startActivity(android.content.Intent(this@MouseUsbProxyActivity, com.valaim.btaimbridge.MouseProxyActivity::class.java)) }
         row.addView(fb, android.widget.LinearLayout.LayoutParams(
@@ -208,7 +218,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             val e = itf.getEndpoint(i)
             if (e.type == UsbConstants.USB_ENDPOINT_XFER_INT && e.direction == UsbConstants.USB_DIR_IN) { ep = e; break }
         }
-        if (ep == null) { CrashLog.log("no IN endpoint"); handler.post { render("该鼠标无输入端点,换页或换鼠标") }; return }
+        if (ep == null) { CrashLog.log("no IN endpoint"); handler.post { render("该鼠标无输入端点,点「释放鼠标」退回系统") }; return }
         val buf = ByteArray(if (ep.maxPacketSize > 0) ep.maxPacketSize else 8)
         CrashLog.log("usb step: entering bulk loop (pkt=${buf.size})")
         var firstLogged = false
@@ -220,10 +230,9 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             }
             if (n >= 3) {
                 reports++; lastReportAt = System.currentTimeMillis()
-                if (!calibrated) {
+                if (!calibrated && n >= 4) {
                     calSamples.add(buf.copyOf(n))
                     if (calSamples.size >= 40) runCalibration()
-                    else { handler.post { render("校准中…请匀速晃晃鼠标 (${calSamples.size}/40)") }; continue }
                 }
                 val buttons = buf[btnOff].toInt() and 0x07
                 var dx = buf[dxOff].toInt(); var dy = buf[dyOff].toInt()
