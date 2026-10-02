@@ -121,6 +121,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--debug", action="store_true")
     p.add_argument("--snap-dir", default="", help="every 5s save annotated capture frame here (what the model actually sees)")
     p.add_argument("--rt-probe", action="store_true", help="measure TCP RTT via PING/PONG + BT mouse RTT via cursor poll")
+    p.add_argument("--infer-idle", action="store_true", help="skip inference while no click/session active (saves GPU, first stroke +25ms)")
     p.add_argument("--max-frames", type=int, default=0)
     p.add_argument("--game-process", default="VALORANT",
                    help="Only act while a foreground process with this name runs ('' disables the gate)")
@@ -131,6 +132,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
     return AimConfig(
         snap_dir=args.snap_dir,
         rt_probe=args.rt_probe,
+        infer_idle=args.infer_idle,
         model_path=resolve_model_path(args.model),
         model_info=resolve_model_path(args.model_info) if args.model_info else None,
         backend=args.backend,
@@ -586,7 +588,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             detections, cursor = snap.detections, snap.cursor
             tick += 1
         else:
-            _idle = not (bt_lmb_held() or time.monotonic() < _snap_session_until)
+            _idle = cfg.infer_idle and not (bt_lmb_held() or time.monotonic() < _snap_session_until)
             if cfg.latch_throttle and engine.is_latched and det_cache is not None and (tick % 2 == 0):
                 img, crop_x, crop_y, crop_w, crop_h, detections = det_cache
             else:
