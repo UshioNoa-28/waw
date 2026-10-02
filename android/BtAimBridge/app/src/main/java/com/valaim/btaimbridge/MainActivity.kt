@@ -196,7 +196,10 @@ class MainActivity : AppCompatActivity() {
             hid = hid,
             onLog = { msg -> setStatus(msg) },
             onClient = { ip -> setStatus("PC connected from $ip") },
-        ).also { it.start() }
+        ).also {
+            it.start()
+            BridgeForegroundService.ensure(this@MainActivity)
+        }
         BridgeGlobals.server = server
 
         running = true

@@ -47,5 +47,8 @@
             android:name=".MouseTestActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
-</application>
+        <service
+            android:name=".BridgeForegroundService"
+            android:foregroundServiceType="connectedDevice" />
+    </application>
 </manifest>
