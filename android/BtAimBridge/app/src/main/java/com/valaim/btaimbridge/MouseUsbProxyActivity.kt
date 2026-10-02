@@ -81,7 +81,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     }
 
     private val permReceiver = object : BroadcastReceiver() {
-        override fun receive(context: Context, intent: Intent) {
+        override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == ACTION_PERM &&
                 intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                 (intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE))?.let { open(it) }
@@ -94,7 +94,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         usbManager?.deviceList?.values?.forEach { d ->
             for (i in 0 until d.interfaceCount) {
                 val itf = d.getInterface(i)
-                if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceProtocol == 2.toByte()) {
+                if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceProtocol == 2) {
                     list.add(d); return@forEach
                 }
             }
@@ -119,7 +119,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     private fun findBootInterface(dev: UsbDevice): UsbInterface? {
         for (i in 0 until dev.interfaceCount) {
             val itf = dev.getInterface(i)
-            if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceProtocol == 2.toByte()) return itf
+            if (itf.interfaceClass == UsbConstants.USB_CLASS_HID && itf.interfaceProtocol == 2) return itf
         }
         return null
     }
