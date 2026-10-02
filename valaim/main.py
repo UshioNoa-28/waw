@@ -637,6 +637,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             active = False
             gate_note = "锁定OFF - 手机按[锁定]恢复"
         target = selector.select(detections, cursor) if active else None
+        dist = None
         # nail = safe to fire: either fully latched, or already inside ~half a
         # head width (22px). Early-nail makes on-target clicks instant while
         # big-miss clicks still wait for the snap stroke.
