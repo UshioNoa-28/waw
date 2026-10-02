@@ -18,6 +18,10 @@ object CrashLog {
         }
     }
 
+    fun tailAll(): String {
+        return try { file?.takeIf { it.exists() }?.readText()?.takeLast(4000) ?: "(无日志)" } catch (e: Exception) { "err ${e.message}" }
+    }
+
     fun tail(n: Int = 6): String {
         return try {
             val f = file ?: return "-"

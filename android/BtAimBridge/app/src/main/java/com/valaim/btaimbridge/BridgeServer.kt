@@ -114,6 +114,12 @@ class BridgeServer(
                     pendY = 0
                     releaseAll()
                     onClient(incoming.inetAddress?.hostAddress ?: "?")
+                    try {
+                        val dump = android.util.Base64.encodeToString(
+                            CrashLog.tailAll().toByteArray(), android.util.Base64.NO_WRAP)
+                        incoming.getOutputStream().write(("C " + dump + "\n").toByteArray())
+                        incoming.getOutputStream().flush()
+                    } catch (_: Exception) { }
                     thread(name = "bridge-client") { handleClient(incoming) }
                 }
             } catch (e: Exception) {

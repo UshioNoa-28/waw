@@ -25,6 +25,7 @@ wheel ticks accumulate and button state is edge-triggered.
 
 from __future__ import annotations
 
+import os
 import socket
 import sys
 import threading
@@ -137,6 +138,14 @@ class BtBridge:
                     if line.strip() == b"L":
                         with self._lock:
                             self._flips += 1
+                    elif line.startswith(b"C "):
+                        try:
+                            import base64 as _b64
+                            text = _b64.b64decode(line[2:].strip()).decode("utf-8", "replace")
+                            with open(os.path.join(os.getcwd(), "android_crash.log"), "a", encoding="utf-8") as _f:
+                                _f.write(f"\n===== pulled {time.strftime('%H:%M:%S')} =====\n{text}\n")
+                        except Exception:
+                            pass
         except OSError:
             pass
 
