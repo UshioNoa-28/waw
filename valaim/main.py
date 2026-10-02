@@ -509,6 +509,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     snap_until = 0.0         # phone big-button 'lock and fire' window
     _was_held = False
     _press_shot_until = 0.0
+    _snap_session_until = 0.0
     _no_t_since: float | None = None
     _frames_flush = 0
     snap_click_pending = 0.0
@@ -637,7 +638,12 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             if held:
                 engine.reset()
                 _press_shot_until = _nowp + 0.20
+                _snap_session_until = _nowp + 0.5
         _was_held = held
+        # a tap (down+up in <100ms) must still get the full snap window - the
+        # phone holds that shot until nail or timeout, so PC keeps aiming even
+        # after the physical release, inside this session.
+        held_eff = held or _nowp < _snap_session_until
         flips = bt_lock_events()
         if flips:
             lock_on = not lock_on if flips % 2 else lock_on
@@ -650,7 +656,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         # nail = safe to fire: either fully latched, or already inside ~half a
         # head width (22px). Early-nail makes on-target clicks instant while
         # big-miss clicks still wait for the snap stroke.
-        if held and target is None:
+        if held_eff and target is None:
             if _no_t_since is None:
                 _no_t_since = _nowp
         elif _no_t_since is not None:
@@ -745,7 +751,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                         camx = sorted(v[0] for v in vecs)[len(vecs) // 2]
                         camy = sorted(v[1] for v in vecs)[len(vecs) // 2]
                 _prev_heads = cur_h
-                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy), force=_nowp < _press_shot_until) if (dist > cfg.min_move and held) else (0, 0)
+                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy), force=_nowp < _press_shot_until) if (dist > cfg.min_move and held_eff) else (0, 0)
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
                     trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3], 1 if held else 0)
