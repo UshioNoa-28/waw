@@ -72,7 +72,6 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         row.addView(btn, android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
-        if (!::fallbackBtn.isInitialized) { }
         val fb = android.widget.Button(this).apply { text = "退回中转模式(边界受限但更兼容)" }
         fb.setOnClickListener { startActivity(android.content.Intent(this@MouseUsbProxyActivity, com.valaim.btaimbridge.MouseProxyActivity::class.java)) }
         row.addView(fb, android.widget.LinearLayout.LayoutParams(
@@ -211,7 +210,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             val n = c.bulkTransfer(ep, buf, buf.size, 200)
             if (!firstLogged && n > 0) {
                 firstLogged = true
-                CrashLog.log("usb step: FIRST REPORT n=$n bytes=${buf.take(min(n,6)).joinToString(",")}")
+                CrashLog.log("usb step: FIRST REPORT n=$n bytes=${buf.take(n.coerceAtMost(6)).joinToString(",")}")
             }
             if (n >= 3) {
                 reports++; lastReportAt = System.currentTimeMillis()
