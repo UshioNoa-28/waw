@@ -155,6 +155,11 @@ class BtBridge:
                     elif line.strip() == b"T":
                         with self._lock:
                             self._snap = getattr(self, "_snap", 0) + 1
+                    elif line.startswith(b"PONG "):
+                        try:
+                            self._ping_rtt = (time.monotonic() - float(line[5:])) * 1000.0
+                        except ValueError:
+                            pass
                     elif line.startswith(b"C "):
                         try:
                             import base64 as _b64
@@ -174,6 +179,20 @@ class BtBridge:
             self._armed = v
             self._dirty = True
             self._cond.notify_all()
+
+    def send_line(self, line: str) -> None:
+        with self._cond:
+            if not hasattr(self, "_pend_lines"):
+                self._pend_lines = []
+            self._pend_lines.append(line)
+            self._dirty = True
+            self._cond.notify_all()
+
+    def pop_ping_rtt(self) -> float | None:
+        v = getattr(self, "_ping_rtt", None)
+        if v is not None:
+            self._ping_rtt = None
+        return v
 
     def set_nail(self, on: bool) -> None:
         v = 1 if on else 0
@@ -220,6 +239,9 @@ class BtBridge:
                     if self._buttons != self._sent_buttons:
                         lines.append(f"B {self._buttons & 0x1F}")
                         self._sent_buttons = self._buttons
+                    lines.extend(getattr(self, "_pend_lines", []) or [])
+                    if getattr(self, "_pend_lines", None):
+                        self._pend_lines = []
                     dx, dy = self._pend_dx, self._pend_dy
                     wheel = self._pend_wheel
                     self._pend_dx = self._pend_dy = 0

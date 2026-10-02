@@ -18,6 +18,7 @@ from .input_ctrl import (
     bt_lock_events,
     bt_nail,
     bt_lmb_held,
+    bt_send_line,
     bt_armed,
     bt_snap_events,
     active_backend,
@@ -509,6 +510,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     _prev_heads: list = []   # camera-motion estimation from common box shift
     nail_state = False
     _last_snap = 0.0
+    _last_ping = 0.0
+    _last_rt = 0.0
     snap_until = 0.0         # phone big-button 'lock and fire' window
     _was_held = False
     _press_shot_until = 0.0
@@ -688,6 +691,33 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         if trace is not None and _frames_flush % 40 == 0:
             try:
                 trace_f.flush()
+            except Exception:
+                pass
+        if cfg.rt_probe and _nowp - _last_ping > 1.0:
+            _last_ping = _nowp
+            bt_send_line(f"PING {_nowp}")
+            _rt = bt_pop_ping_rtt()
+            if _rt is not None and trace is not None:
+                trace.writerow(["ping", round(_nowp - t0, 4), round(_rt, 1)])
+                trace_f.flush()
+        if cfg.rt_probe and _nowp - _last_rt > 8.0 and not in_game:
+            _last_rt = _nowp
+            try:
+                from .input_ctrl import get_cursor_pos
+                x0, y0 = get_cursor_pos()
+                move_mouse(40, 0)
+                hit = None
+                _tp = time.monotonic()
+                while time.monotonic() - _tp < 0.5:
+                    x1, y1 = get_cursor_pos()
+                    if abs(x1 - x0) >= 15:
+                        hit = (time.monotonic() - _tp) * 1000.0
+                        break
+                    time.sleep(0.004)
+                move_mouse(-40, 0)
+                if trace is not None:
+                    trace.writerow(["rt", round(_nowp - t0, 4), round(hit, 1) if hit else -1])
+                    trace_f.flush()
             except Exception:
                 pass
         _sd = cfg.snap_dir

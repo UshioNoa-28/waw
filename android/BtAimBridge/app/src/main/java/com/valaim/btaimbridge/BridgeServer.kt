@@ -214,6 +214,7 @@ class BridgeServer(
                 hid.sendReport(buttonMask, 0, 0, step)
             }
             "P" -> { /* keepalive */ }
+            "PING" -> { sendAsync("PONG " + (parts.getOrNull(1) ?: "0") + "\n") }
             "N" -> {
                 val on = (parts.getOrNull(1)?.toIntOrNull() ?: 0) != 0
                 if (on != nailOk) { nailOk = on; onNail?.invoke(on) }

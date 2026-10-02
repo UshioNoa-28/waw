@@ -270,6 +270,23 @@ def bt_armed(on: bool) -> None:
             pass
 
 
+def bt_send_line(line: str) -> None:
+    if _BT is not None:
+        try:
+            _BT.send_line(line)
+        except Exception:
+            pass
+
+
+def bt_pop_ping_rtt():
+    if _BT is not None:
+        try:
+            return _BT.pop_ping_rtt()
+        except Exception:
+            return None
+    return None
+
+
 def bt_lmb_held() -> bool:
     """Phone reports the user is holding left mouse (proxy gate)."""
     if _BT is not None:
