@@ -78,19 +78,20 @@ class MouseProxyActivity : AppCompatActivity() {
                                 hid()?.sendReport(up, 0, 0, 0)
                             }, 20)
                         }
-                    } else
-                    val nailed = BridgeGlobals.server?.nailOk == true
-                    if (nailed || System.currentTimeMillis() - pressAt > graceMs) {
-                        if (nailed) nails++ else holds++
-                        btnMask = btnMask or 0x01
-                        lmbDownSent = true
-                        released = true
-                        if (lmbWantsRelease) {           // quick tap while gated
-                            lmbHeld = false; lmbWantsRelease = false
-                            handler.postDelayed({
-                                btnMask = btnMask and 1.inv()
-                                hid()?.sendReport(btnMask, 0, 0, 0)
-                            }, 15)
+                    } else {
+                        val nailed = BridgeGlobals.server?.nailOk == true
+                        if (nailed || System.currentTimeMillis() - pressAt > graceMs) {
+                            if (nailed) nails++ else holds++
+                            btnMask = btnMask or 0x01
+                            lmbDownSent = true
+                            released = true
+                            if (lmbWantsRelease) {           // quick tap while gated
+                                lmbHeld = false; lmbWantsRelease = false
+                                handler.postDelayed({
+                                    btnMask = btnMask and 1.inv()
+                                    hid()?.sendReport(btnMask, 0, 0, 0)
+                                }, 15)
+                            }
                         }
                     }
                 }
