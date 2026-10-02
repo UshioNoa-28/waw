@@ -4,6 +4,7 @@ package com.valaim.btaimbridge
 object BridgeGlobals {
     @Volatile var hid: HidMouseController? = null
     @Volatile var server: BridgeServer? = null
+    @Volatile var btnMask = 0
 
     fun clientAlive(): Boolean = server?.isAlive() == true
 }

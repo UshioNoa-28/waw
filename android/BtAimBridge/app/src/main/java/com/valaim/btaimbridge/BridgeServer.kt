@@ -38,7 +38,9 @@ class BridgeServer(
     @Volatile var nailOk: Boolean = false
     @Volatile var assistOn: Boolean = false
     var onNail: ((Boolean) -> Unit)? = null
-    @Volatile private var buttonMask = 0
+    private var buttonMask: Int
+        get() = BridgeGlobals.btnMask
+        set(v) { BridgeGlobals.btnMask = v }
 
     // Coalesced, rate-paced move output: the PC can burst commands faster
     // than Bluetooth can drain; replaying every queued move would stack up

@@ -27,7 +27,6 @@ class MouseProxyActivity : AppCompatActivity() {
     @Volatile private var pendX = 0
     @Volatile private var pendY = 0
     @Volatile private var pendWheel = 0
-    @Volatile private var btnMask = 0
     @Volatile private var trackedButtons = 0
     @Volatile private var lastX = -1f
     @Volatile private var lastY = -1f
@@ -58,6 +57,10 @@ class MouseProxyActivity : AppCompatActivity() {
     }
 
     private fun hid() = BridgeGlobals.hid
+
+    private var btnMask: Int
+        get() = BridgeGlobals.btnMask
+        set(v) { BridgeGlobals.btnMask = v }
 
     private val tick = object : Runnable {
         override fun run() {
