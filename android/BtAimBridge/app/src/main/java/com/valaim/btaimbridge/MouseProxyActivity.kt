@@ -44,6 +44,7 @@ class MouseProxyActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32) }
         setContentView(out)
+        out.post { try { out.requestPointerCapture() } catch (_: Exception) { } }
         handler.post(tick)
     }
 
@@ -107,16 +108,18 @@ class MouseProxyActivity : AppCompatActivity() {
         if (!ev.isFromSource(InputDevice.SOURCE_MOUSE)) return super.dispatchGenericMotionEvent(ev)
         when (ev.actionMasked) {
             MotionEvent.ACTION_MOVE, MotionEvent.ACTION_HOVER_MOVE -> {
-                val x = ev.getAxisValue(MotionEvent.AXIS_X)
-                val y = ev.getAxisValue(MotionEvent.AXIS_Y)
-                if (lastX >= 0f) {
-                    val dx = (x - lastX).toInt()
-                    val dy = (y - lastY).toInt()
-                    if (kotlin.math.abs(dx) < 400 && kotlin.math.abs(dy) < 400 && (dx != 0 || dy != 0)) {
-                        pendX += dx; pendY += dy; moves++
-                    }
+                // captured pointer => true relative deltas (no screen clamp)
+                var dx = ev.getAxisValue(MotionEvent.AXIS_RELATIVE_X).toInt()
+                var dy = ev.getAxisValue(MotionEvent.AXIS_RELATIVE_Y).toInt()
+                if (dx == 0 && dy == 0) {
+                    val x = ev.getAxisValue(MotionEvent.AXIS_X)
+                    val y = ev.getAxisValue(MotionEvent.AXIS_Y)
+                    if (lastX >= 0f) { dx = (x - lastX).toInt(); dy = (y - lastY).toInt() }
+                    lastX = x; lastY = y
                 }
-                lastX = x; lastY = y
+                if (kotlin.math.abs(dx) < 400 && kotlin.math.abs(dy) < 400 && (dx != 0 || dy != 0)) {
+                    pendX += dx; pendY += dy; moves++
+                }
             }
             MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> {
                 val press = ev.actionMasked == MotionEvent.ACTION_BUTTON_PRESS
