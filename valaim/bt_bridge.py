@@ -138,6 +138,9 @@ class BtBridge:
                     if line.strip() == b"L":
                         with self._lock:
                             self._flips += 1
+                    elif line.strip() == b"T":
+                        with self._lock:
+                            self._snap = getattr(self, "_snap", 0) + 1
                     elif line.startswith(b"C "):
                         try:
                             import base64 as _b64
@@ -157,6 +160,12 @@ class BtBridge:
             self._nail = v
             self._dirty = True
             self._cond.notify_all()
+
+    def pop_snap_flips(self) -> int:
+        with self._lock:
+            n = getattr(self, "_snap", 0)
+            self._snap = 0
+            return n
 
     def pop_lock_flips(self) -> int:
         with self._lock:

@@ -251,6 +251,16 @@ _MOUSE_VK = {
 }
 
 
+def bt_snap_events() -> int:
+    """Number of 'lock and fire' presses from the phone big button."""
+    if _BT is not None:
+        try:
+            return _BT.pop_snap_flips()
+        except Exception:
+            return 0
+    return 0
+
+
 def bt_nail(on: bool) -> None:
     """Tell the phone whether the crosshair is nailed (mouse-proxy LMB gate)."""
     if _BT is not None:

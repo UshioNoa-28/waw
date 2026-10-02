@@ -49,6 +49,15 @@ class BridgeServer(
 
     fun isAlive(): Boolean = running && client != null
 
+    /** Fire button press from the big red button -> 'T' to the PC over the client socket. */
+    fun sendTrigger() {
+        val c = client ?: return
+        try {
+            c.getOutputStream().write("T\n".toByteArray())
+            c.getOutputStream().flush()
+        } catch (_: Exception) { }
+    }
+
     fun start() {
         if (running) return
         running = true

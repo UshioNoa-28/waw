@@ -61,7 +61,7 @@ class TargetSelector:
             return cx, det.y + det.h * self.cfg.head_width + off
         return cx, det.y + det.h * self.cfg.aim_height + off
 
-    def select(self, detections: list[Detection], cursor: tuple[int, int]) -> Target | None:
+    def select(self, detections: list[Detection], cursor: tuple[int, int], fov: float | None = None) -> Target | None:
         best: Target | None = None
 
         # sticky lock: keep chasing the box we locked onto (within 45px of its
@@ -96,7 +96,7 @@ class TargetSelector:
                 continue
             distance = math.hypot(x - cursor[0], y - cursor[1])
 
-            if distance > self.cfg.fov_radius:
+            if distance > (self.cfg.fov_radius if fov is None else fov):
                 continue
 
             score = det.conf - 0.0005 * distance

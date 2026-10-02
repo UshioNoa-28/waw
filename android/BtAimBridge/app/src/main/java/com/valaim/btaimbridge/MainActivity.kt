@@ -44,11 +44,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etPort: EditText
     private lateinit var btnToggle: Button
 
-    override fun onResume() {
-        super.onResume()
-        CrashLog.log("MainActivity resume, tail: ${CrashLog.tail(3)}")
-    }
-
         override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashLog.init(this)
@@ -77,6 +72,12 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 Toast.makeText(this, "无法打开蓝牙设置", Toast.LENGTH_SHORT).show()
             }
+        }
+        findViewById<Button>(R.id.btnFireSnap).setOnTouchListener { v, ev ->
+            when (ev.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> server?.sendTrigger()
+            }
+            v.performClick(); false
         }
         findViewById<Button>(R.id.btnMouseProxy).setOnClickListener {
             try { startActivity(android.content.Intent(this, MouseUsbProxyActivity::class.java)) }

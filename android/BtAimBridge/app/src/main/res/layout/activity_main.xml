@@ -89,6 +89,15 @@
             android:text="锁定: ON (点这里开关)" />
 
         <Button
+            android:id="@+id/btnFireSnap"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:text="🎯 锁头开枪"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:backgroundTint="#b91c1c" />
+
+        <Button
             android:id="@+id/btnMouseProxy"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

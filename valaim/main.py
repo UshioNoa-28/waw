@@ -17,6 +17,7 @@ from .input_ctrl import (
     mouse_button_down,
     bt_lock_events,
     bt_nail,
+    bt_snap_events,
     active_backend,
     close_backend,
     key_state,
@@ -503,6 +504,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     grab_ms = infer_ms = 0.0
     _prev_heads: list = []   # camera-motion estimation from common box shift
     nail_state = False
+    snap_until = 0.0         # phone big-button 'lock and fire' window
+    snap_click_pending = 0.0
     _dump_t = 0.0
     _dump_next = 0.0  # phone [锁定] button toggles (Vanguard hides all local keys in game)
     trace = None
@@ -598,6 +601,14 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             active = mouse_button_down(cfg.hold_button)
         else:
             active = True
+        if snap_click_pending and time.monotonic() >= snap_click_pending:
+            snap_click_pending = 0.0
+            try:
+                from . import input_ctrl as _ic2
+                if _ic2._BT is not None:
+                    _ic2._BT.set_buttons(_ic2._BT._buttons & ~1)
+            except Exception:
+                pass
         # Foreground gate: never move the mouse unless the game owns focus.
         in_game = True
         gate_note = ""
@@ -607,6 +618,10 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             if not in_game:
                 gate_note = f"游戏未在前台(当前:{fpname or '未知'})"
         active = active and in_game
+        _nowp = time.monotonic()
+        if bt_snap_events():
+            snap_until = _nowp + 0.40
+        snap_armed = _nowp < snap_until
         flips = bt_lock_events()
         if flips:
             lock_on = not lock_on if flips % 2 else lock_on
@@ -621,6 +636,17 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         if _nl != nail_state:
             nail_state = _nl
             bt_nail(_nl)
+        if snap_armed and _nl:
+            from .bt_bridge import BTN_LEFT
+            bridge = None
+            try:
+                from . import input_ctrl as _ic
+                if _ic._BT is not None:
+                    _ic._BT.set_buttons(_ic._BT._buttons | BTN_LEFT)
+                    snap_click_pending = _nowp + 0.045
+            except Exception:
+                pass
+            snap_until = 0.0
         if trace is not None:
             _nh = sum(1 for d in detections if "head" in d.name.lower())
             _nb = sum(1 for d in detections if "body" in d.name.lower())
