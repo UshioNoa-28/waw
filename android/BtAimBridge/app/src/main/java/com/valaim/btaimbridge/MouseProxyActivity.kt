@@ -36,6 +36,7 @@ class MouseProxyActivity : AppCompatActivity() {
     @Volatile private var l1Sent = 0
     @Volatile private var lmbDownSent = false
     @Volatile private var lmbWantsRelease = false
+    @Volatile private var lmbPhysUp = false
     @Volatile private var pressAt = 0L
     private var moves = 0
     private var holds = 0
@@ -76,15 +77,15 @@ class MouseProxyActivity : AppCompatActivity() {
             if (h != null) {
                 var released = false
                 val assist = BridgeGlobals.server?.assistOn == true
-                if ((lmbHeld || lmbWantsRelease) && !lmbDownSent) {
+                if ((lmbHeld || lmbWantsRelease || lmbPhysUp) && !lmbDownSent) {
                     if (!assist) {
                         // PC assist not live: plain passthrough, behave exactly
                         // like an ungated mouse (stay down while held, up on release)
                         btnMask = btnMask or 0x01
                         lmbDownSent = true; lastDownAt = System.currentTimeMillis()
                         clickReport(btnMask)
-                        if (lmbWantsRelease) {
-                            lmbHeld = false; lmbWantsRelease = false
+                        if (lmbWantsRelease || lmbPhysUp) {
+                            lmbHeld = false; lmbWantsRelease = false; lmbPhysUp = false
                             handler.postDelayed({
                                 val up = btnMask and 1.inv()
                                 btnMask = up
@@ -98,8 +99,8 @@ class MouseProxyActivity : AppCompatActivity() {
                             btnMask = btnMask or 0x01
                             lmbDownSent = true; lastDownAt = System.currentTimeMillis()
                             released = true
-                            if (lmbWantsRelease) {           // quick tap while gated
-                                lmbHeld = false; lmbWantsRelease = false
+                            if (lmbWantsRelease || lmbPhysUp) {   // tap finished while gated
+                                lmbHeld = false; lmbWantsRelease = false; lmbPhysUp = false
                                 handler.postDelayed({
                                     btnMask = btnMask and 1.inv()
                                     clickReport(btnMask)
@@ -168,7 +169,7 @@ class MouseProxyActivity : AppCompatActivity() {
                 val primary = ev.actionButton == MotionEvent.BUTTON_PRIMARY || (diff and MotionEvent.BUTTON_PRIMARY != 0)
                 if (primary) {
                     if (press) {
-                        if (!lmbHeld && lmbWantsRelease && !lmbDownSent) {
+                        if (!lmbHeld && (lmbWantsRelease || lmbPhysUp) && !lmbDownSent) {
                             // second tap while first is still gated: release the
                             // first IMMEDIATELY as a plain click (never swallow a
                             // shot), then open a fresh snap window for this tap
@@ -179,16 +180,16 @@ class MouseProxyActivity : AppCompatActivity() {
                                 btnMask = up
                                 hid()?.sendReport(up, 0, 0, 0)
                             }, 60)
-                            lmbWantsRelease = false
+                            lmbWantsRelease = false; lmbPhysUp = false
                             holds++
                         }
-                        lmbHeld = true; pressAt = System.currentTimeMillis()
+                        lmbHeld = true; lmbPhysUp = false; pressAt = System.currentTimeMillis()
                         BridgeGlobals.server?.sendLmb(true)
                         l1Sent++
                         com.valaim.btaimbridge.CrashLog.log("sent L1 #$l1Sent assist=${BridgeGlobals.server?.assistOn}")
                     }
                     else {
-                        lmbHeld = false
+                        lmbPhysUp = true
                         BridgeGlobals.server?.sendLmb(false)
                         CrashLog.log("sent L0")
                         if (lmbDownSent) {
