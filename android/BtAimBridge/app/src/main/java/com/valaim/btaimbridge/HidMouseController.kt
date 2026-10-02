@@ -49,6 +49,10 @@ class HidMouseController(
     val isReady: Boolean get() = connected
 
     private val callback = object : BluetoothHidDevice.Callback() {
+        override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {
+            if (id.toInt() == 1) BridgeGlobals.onVendorFrame?.invoke(data)
+        }
+
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
             when (state) {
@@ -112,8 +116,6 @@ class HidMouseController(
             } catch (_: Exception) {
             }
         }
-
-        override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {}
 
         override fun onSetProtocol(device: BluetoothDevice, protocol: Byte) {}
 
@@ -319,6 +321,13 @@ class HidMouseController(
         registered = false
         connected = false
         if (dev != null) adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, dev)
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendVendor(frame: ByteArray): Boolean {
+        val dev = hostDevice ?: return false
+        val f = if (frame.size >= 8) frame.copyOfRange(0, 8) else frame.copyOf(8)
+        return try { hidDevice?.sendReport(dev, 1, f) ?: false } catch (_: SecurityException) { false }
     }
 
     @SuppressLint("MissingPermission")

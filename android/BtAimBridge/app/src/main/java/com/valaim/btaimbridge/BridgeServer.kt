@@ -65,16 +65,45 @@ class BridgeServer(
         }
     }
 
+    private fun vendorSendLine(line: String) {
+        val b = line.trim().toByteArray()
+        if (b.size > 6) return
+        val f = ByteArray(8)
+        f[0] = 0x02; f[1] = b.size.toByte()
+        System.arraycopy(b, 0, f, 2, b.size)
+        try { BridgeGlobals.hid?.sendVendor(f) } catch (_: Exception) { }
+    }
+
     fun sendLmb(on: Boolean) {
-        sendAsync(if (on) "L1\n" else "L0\n")
+        val l = if (on) "L1" else "L0"
+        sendAsync(l + "\n")
+        vendorSendLine(l)
     }
 
     fun sendTrigger() {
         sendAsync("T\n")
+        vendorSendLine("T")
+    }
+
+    // PC->phone binary frames: [op, p1, p2, p3, p4, p5, p6, p7]
+    //   op 0x01 'M' move: p1=payload-len, then ascii like the TCP lines (reuse applyCommand)
+    //   op 0x41 PING: echo back as vendor 0x41 + seq for RTT
+    fun handleVendorFrame(f: ByteArray) {
+        when (f[0].toInt()) {
+            0x01 -> {
+                val n = (f[1].toInt() and 0x7F).coerceAtMost(6)
+                val txt = String(f, 2, n).trim()
+                if (txt.isNotEmpty()) applyCommand(txt)
+            }
+            0x41 -> {
+                BridgeGlobals.hid?.sendVendor(byteArrayOf(0x41, *f.copyOfRange(1, 8)))
+            }
+        }
     }
 
     fun start() {
         if (running) return
+        BridgeGlobals.onVendorFrame = { handleVendorFrame(it) }
         running = true
         worker = thread(name = "bridge-server") { loop() }
         drainThread = thread(name = "bridge-drain") { drainLoop() }

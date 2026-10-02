@@ -74,6 +74,15 @@ class BtBridge:
         self._nail = -1   # -1 unknown, 0/1 last sent state
         self._armed = -1  # -1 unknown; 1 = assist live in-game (phone may gate LMB)
 
+        self._hid = None
+        try:
+            from .hid_host import HidHost
+            self._hid = HidHost()
+        except Exception:
+            self._hid = None
+        self._hid_ready = False
+        self._hid_seq = 0
+        self._hid_rtt = None
         self._thread = threading.Thread(target=self._run, name="bt-bridge", daemon=True)
         self._thread.start()
 
@@ -92,6 +101,14 @@ class BtBridge:
                 self._dirty = True
             threading.Thread(target=self._read_loop, args=(sock,),
                              name="bt-bridge-rx", daemon=True).start()
+            if self._hid is not None and not self._hid_ready:
+                def _cb(line):
+                    self._feed_line(line)
+                try:
+                    self._hid_ready = bool(self._hid.open(on_line=_cb))
+                    self._last_error = "" if self._hid_ready else ("hid: " + self._hid.last_error)
+                except Exception as e:
+                    self._hid_ready = False
             return True
         except OSError as exc:
             self._last_error = str(exc)
@@ -142,32 +159,7 @@ class BtBridge:
                 buf += data
                 while b"\n" in buf:
                     line, _, buf = buf.partition(b"\n")
-                    if line.strip() == b"L1":
-                        with self._lock:
-                            self._lmb = True
-                            self._lmb_at = time.monotonic()
-                    elif line.strip() == b"L0":
-                        with self._lock:
-                            self._lmb = False
-                    elif line.strip() == b"L":
-                        with self._lock:
-                            self._flips += 1
-                    elif line.strip() == b"T":
-                        with self._lock:
-                            self._snap = getattr(self, "_snap", 0) + 1
-                    elif line.startswith(b"PONG "):
-                        try:
-                            self._ping_rtt = (time.monotonic() - float(line[5:])) * 1000.0
-                        except ValueError:
-                            pass
-                    elif line.startswith(b"C "):
-                        try:
-                            import base64 as _b64
-                            text = _b64.b64decode(line[2:].strip()).decode("utf-8", "replace")
-                            with open(os.path.join(os.getcwd(), "android_crash.log"), "a", encoding="utf-8") as _f:
-                                _f.write(f"\n===== pulled {time.strftime('%H:%M:%S')} =====\n{text}\n")
-                        except Exception:
-                            pass
+                    self._process_line(line)
         except OSError:
             pass
 
@@ -221,6 +213,50 @@ class BtBridge:
             n, self._flips = self._flips, 0
         return n
 
+    def _process_line(self, line) -> None:
+        if isinstance(line, str):
+            line = line.encode()
+        st = line.strip()
+        if st == b"L1":
+            with self._lock:
+                self._lmb = True
+                self._lmb_at = time.monotonic()
+        elif st == b"L0":
+            with self._lock:
+                self._lmb = False
+        elif st == b"L":
+            with self._lock:
+                self._flips += 1
+        elif st == b"T":
+            with self._lock:
+                self._snap = getattr(self, "_snap", 0) + 1
+        elif st.startswith(b"PONGHID "):
+            # RTT over Bluetooth vendor channel (seq-based); stamp on send in ping_hid
+            try:
+                self._hid_rtt = (time.monotonic() - self._hid_sent_at) * 1000.0
+            except Exception:
+                pass
+        elif st.startswith(b"PONG "):
+            try:
+                self._ping_rtt = (time.monotonic() - float(line[5:])) * 1000.0
+            except ValueError:
+                pass
+        elif st.startswith(b"C "):
+            try:
+                import base64 as _b64
+                text = _b64.b64decode(st[2:].strip()).decode("utf-8", "replace")
+                with open(os.path.join(os.getcwd(), "android_crash.log"), "a", encoding="utf-8") as _f:
+                    _f.write(f"\n===== pulled {time.strftime('%H:%M:%S')} =====\n{text}\n")
+            except Exception:
+                pass
+
+    def ping_hid(self) -> bool:
+        if self._hid is None or not self._hid_ready:
+            return False
+        self._hid_sent_at = time.monotonic()
+        self._hid_seq = (self._hid_seq + 1) & 0xFF
+        return self._hid.ping(self._hid_seq)
+
     def _pump(self) -> None:
         last_tx = time.monotonic()
         while self._running:
@@ -253,6 +289,16 @@ class BtBridge:
                         lines.append(f"W {1 if wheel > 0 else -1}")
                 if not lines:
                     lines.append("P")
+                # realtime commands (M/N/B/A/L*/T) ride the BT vendor report when
+                # available: one hop, no WiFi contention. P/C stay on TCP.
+                rt = [x for x in lines if x[0] in "MNBAL"]
+                rest = [x for x in lines if x[0] not in "MNBAL"]
+                if rt and self._hid_ready and self._hid is not None:
+                    ok = all(self._hid.send_text(x) for x in rt)
+                    if not ok:
+                        self._hid_ready = False
+                        rest = rt + rest
+                    lines = rest
             if sock is None:
                 return
             payload = ("\n".join(lines) + "\n").encode("ascii")

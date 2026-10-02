@@ -44,6 +44,20 @@ object MouseReport {
         0x81.toByte(), 0x06.toByte(),       //     Input (Data,Var,Rel)
         0xC0.toByte(),                      //   End Collection
         0xC0.toByte(),                      // End Collection
+
+        // vendor control channel: report id 1, 8-byte input + output frames
+        0x06.toByte(), 0x00.toByte(), 0xFF.toByte(),  // Usage Page (Vendor 0xFF00)
+        0x09.toByte(), 0x01.toByte(),       // Usage (1)
+        0xA1.toByte(), 0x01.toByte(),       // Collection (Application)
+        0x85.toByte(), 0x01.toByte(),       //   Report ID (1)
+        0x15.toByte(), 0x00.toByte(),       //   Logical Min (0)
+        0x25.toByte(), 0xFF.toByte(),       //   Logical Max (255)
+        0x75.toByte(), 0x08.toByte(),       //   Report Size (8)
+        0x95.toByte(), 0x08.toByte(),       //   Report Count (8)
+        0x81.toByte(), 0x02.toByte(),       //   Input (Data,Var,Abs)
+        0x95.toByte(), 0x08.toByte(),       //   Report Count (8)
+        0x91.toByte(), 0x02.toByte(),       //   Output (Data,Var,Abs)
+        0xC0.toByte(),                      // End Collection
     )
 
     const val BTN_LEFT = 0x01

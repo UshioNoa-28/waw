@@ -19,6 +19,8 @@ from .input_ctrl import (
     bt_nail,
     bt_lmb_held,
     bt_send_line,
+    bt_ping_hid,
+    bt_hid_stats,
     bt_pop_ping_rtt,
     bt_armed,
     bt_snap_events,
@@ -712,9 +714,22 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         if cfg.rt_probe and _nowp - _last_ping > 1.0:
             _last_ping = _nowp
             bt_send_line(f"PING {_nowp}")
+            bt_ping_hid()
             _rt = bt_pop_ping_rtt()
-            if _rt is not None and trace is not None:
-                trace.writerow(["ping", round(_nowp - t0, 4), round(_rt, 1)])
+            _hrdy, _hrt = bt_hid_stats()
+            if trace is not None:
+                if _rt is not None:
+                    trace.writerow(["ping", round(_nowp - t0, 4), round(_rt, 1)])
+                if _hrt is not None and _hrdy:
+                    trace.writerow(["pinghid", round(_nowp - t0, 4), round(_hrt, 1)])
+                    bt_hid_stats()
+                    _BTX = None
+                    try:
+                        from . import input_ctrl as _ic3
+                        if _ic3._BT is not None:
+                            _ic3._BT._hid_rtt = None
+                    except Exception:
+                        pass
                 trace_f.flush()
         if cfg.rt_probe and _nowp - _last_rt > 8.0 and not in_game and _rt_state is None:
             _last_rt = _nowp
