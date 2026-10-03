@@ -4,7 +4,7 @@ ROOT="/home/anna/code/projects/val"
 files=sorted(glob.glob(f"{ROOT}/distill_data/test_frames/*.jpg")+glob.glob(f"{ROOT}/distill_data/test_frames/*.png"))
 random.Random(11).shuffle(files); files=files[:150]
 T=YOLO(f"{ROOT}/models/valorant_yolo11m/model.onnx")
-S=YOLO(f"{ROOT}/models/valorant_v26s/model.onnx")
+S=YOLO(f"{ROOT}/models/valorant_v26s_r3/model.onnx")
 def boxes(r): return [[float(v) for v in b.xyxy[0]] for b in r.boxes]
 def iou(a,b):
     ix=min(a[2],b[2])-max(a[0],b[0]); iy=min(a[3],b[3])-max(a[1],b[1])

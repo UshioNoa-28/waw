@@ -3,11 +3,11 @@ from dataclasses import dataclass, field
 
 @dataclass
 class AimConfig:
-    model_path: str = "models/valorant_v26s/model_fp16.onnx"
+    model_path: str = "models/valorant_v26s_r3/model_fp16.onnx"
     model_info: str | None = None
     backend: str = "auto"
     device_id: int = 0
-    imgsz: int = 448
+    imgsz: int = 640
 
     capture_mode: str = "center"
     capture_backend: str = "auto"   # auto|dxcam|dxcam-old|mss
