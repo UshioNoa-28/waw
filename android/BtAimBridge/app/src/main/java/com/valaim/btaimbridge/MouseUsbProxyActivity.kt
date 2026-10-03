@@ -169,13 +169,14 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             appendLine("左键: ${if (lmbHeld) if (lmbDownSent) "已放行" else "扣住…" else "-"} 辅助:${BridgeGlobals.server?.assistOn}")
             appendLine("报文 $totalReports (~$reportsPerSec/s)")
             appendLine("---- 诊断 ----")
-            append(CrashLog.tail(3))
+            append(CrashLog.tail(5))
         }
     }
 
     // ---------- takeover ----------
 
     private fun takeOver() {
+        CrashLog.log("usb takeOver: devices=" + usbManager.deviceList.keys.joinToString(",") { it })
         val mouse = usbManager.deviceList.values.firstOrNull { dev ->
             (0 until dev.interfaceCount).any { k ->
                 val it = dev.getInterface(k)
@@ -186,7 +187,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
                     }
             }
         }
-        if (mouse == null) { renderRaw("没找到 USB 鼠标(检查 OTG/接口)"); return }
+        if (mouse == null) { renderRaw("没找到 USB 鼠标(检查OTG/接口/换口)"); return }
         if (!usbManager.hasPermission(mouse)) {
             val flags = if (android.os.Build.VERSION.SDK_INT >= 31) 0 else PendingIntent.FLAG_IMMUTABLE
             usbManager.requestPermission(
@@ -454,6 +455,17 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     private fun renderRaw(s: String) {
         CrashLog.log("usb: $s")
         handler.post { renderStatus() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (deviceName.isNotEmpty() && !polling) {
+            val dev = usbManager.deviceList[deviceName]
+            if (dev != null && usbManager.hasPermission(dev)) {
+                CrashLog.log("usb: permission granted, auto-resume")
+                openAndRun(dev)
+            }
+        }
     }
 
     override fun onDestroy() {
