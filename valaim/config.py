@@ -33,7 +33,7 @@ class AimConfig:
     min_move: int = 2
     move_fraction: float = 0.7
     max_step: int = 500
-    aim_lead: float = 0.0
+    aim_lead: float = 0.22
     aim_floor: float = 2.0
     arrive_px: float = 8.0
     resume_px: float = 40.0   # > measured spike p50*2: spikes must not unlatch
