@@ -65,7 +65,8 @@ class MouseUsbProxyActivity : AppCompatActivity() {
                 val assist = BridgeGlobals.server?.assistOn == true
                 if ((lmbHeld || lmbWantsRelease || lmbPhysUp) && !lmbDownSent) {
                     if (!assist) {
-                        btnMask = btnMask or 0x01                        lmbDownSent = true; lastDownAt = System.currentTimeMillis()
+                        btnMask = btnMask or 0x01
+                        lmbDownSent = true; lastDownAt = System.currentTimeMillis()
                         clickReport(btnMask)
                         if (lmbWantsRelease || lmbPhysUp) {
                             lmbHeld = false; lmbWantsRelease = false; lmbPhysUp = false
@@ -79,7 +80,8 @@ class MouseUsbProxyActivity : AppCompatActivity() {
                         val nailed = BridgeGlobals.server?.nailOk == true
                         if (nailed || System.currentTimeMillis() - pressAt > graceMs) {
                             if (nailed) nails++ else holds++
-                            btnMask = btnMask or 0x01                            lmbDownSent = true; lastDownAt = System.currentTimeMillis()
+                            btnMask = btnMask or 0x01
+                        lmbDownSent = true; lastDownAt = System.currentTimeMillis()
                             clickReport(btnMask)
                             if (lmbWantsRelease || lmbPhysUp) {
                                 lmbHeld = false; lmbWantsRelease = false; lmbPhysUp = false
