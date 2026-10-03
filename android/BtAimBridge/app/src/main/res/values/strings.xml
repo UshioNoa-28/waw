@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BtAimBridge</string>
+    <string name="recenter_desc">光标撞边自动回中(鼠标代理防边界)</string>
 </resources>
-<string name="recenter_desc">光标撞边自动回中(鼠标代理防边界)</string>
