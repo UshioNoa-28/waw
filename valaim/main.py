@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--capture-anchor", default="crosshair", choices=["crosshair", "cursor"])
     p.add_argument("--crop", type=int, default=640)
     p.add_argument("--monitor", type=int, default=0)
-    p.add_argument("--team-guard", action="store_true", help="verify enemy via red/teal bar hues above the head box; ally & single-frame blips never stroke (implied by --auto-burst)")
+    p.add_argument("--team-guard", action="store_true", help="After latching, verify enemy via red crosshair pixels; ban non-enemy boxes briefly")
     p.add_argument("--min-head", type=float, default=10.0, help="Ignore targets with head-box narrower than this (px)")
     p.add_argument("--conf", type=float, default=0.4)
     p.add_argument("--iou", type=float, default=0.45)
@@ -169,7 +169,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         aim_dz_frac=args.dz_frac,
         latch_throttle=args.latch_throttle,
         async_pipeline=args.async_pipeline,
-        team_guard=bool(args.team_guard or args.auto_burst),
+        team_guard=args.team_guard,
         burst=args.burst,
         burst_cooldown=args.burst_cooldown,
         burst_gain=args.burst_gain,
@@ -381,28 +381,6 @@ def _new_capture(cfg: AimConfig):
     return base
 
 
-def _team_of(img, x: float, y: float, w: float, h: float) -> str:
-    # VALORANT paints enemy health bars/outlines red and teammate ones teal-blue.
-    # Sample the band just above the head box (and its sides) for hue votes.
-    try:
-        Hh, Ww = img.shape[0], img.shape[1]
-        x0 = max(0, int(x - w * 0.6)); x1 = min(Ww, int(x + w * 1.6))
-        y0 = max(0, int(y - h * 0.9)); y1 = max(y0 + 1, int(y + h * 0.1))
-        band = img[y0:y1, x0:x1].astype(_np.int16)
-        if band.size == 0:
-            return "unknown"
-        B = band[:, :, 0]; G = band[:, :, 1]; R = band[:, :, 2]
-        red = int(((R > 130) & (G < 90) & (B < 90)).sum())
-        blue = int(((B > 130) & (R < 110) & (G > 70)).sum())
-        if red >= blue * 1.5 and red >= 10:
-            return "enemy"
-        if blue >= red * 1.5 and blue >= 10:
-            return "ally"
-        return "unknown"
-    except Exception:
-        return "unknown"
-
-
 def _scoreboard_up(img) -> bool:
     # VALORANT's scoreboard is a near-white full-screen wash; agent portraits
     # there read as heads to the detector. Cheap downsampled brightness test.
@@ -557,8 +535,6 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     _last_rt = 0.0
     snap_until = 0.0         # phone big-button 'lock and fire' window
     _was_held = False
-    _tgt_streak = 0
-    _tgt_key = None
     _press_shot_until = 0.0
     _snap_session_until = 0.0
     _session_fired = False
@@ -866,14 +842,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                         camy = sorted(v[1] for v in vecs)[len(vecs) // 2]
                 _prev_heads = cur_h
                 _aim_gate = True if (not cfg.burst or cfg.auto_burst) else held_eff
-                _tgt_streak = _tgt_streak + 1 if _tgt_key is not None and _tgt_key == (round(target.x / 25.0), round(target.y / 25.0)) else 1
-                _tgt_key = (round(target.x / 25.0), round(target.y / 25.0))
                 mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy), force=_nowp < _press_shot_until) if (dist > cfg.min_move and _aim_gate) else (0, 0)
                 if (mx or my) and _scoreboard_up(img):
-                    mx = my = 0
-                if (mx or my) and cfg.team_guard and _team_of(img, target.det.x, target.det.y, target.det.w, target.det.h) == "ally":
-                    mx = my = 0
-                if (mx or my) and cfg.auto_burst and _tgt_streak < 2:
                     mx = my = 0
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
