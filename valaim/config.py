@@ -52,6 +52,7 @@ class AimConfig:
     aim_comp: int = 4
     async_pipeline: bool = False  # measured SLOWER (GIL contention, no GPU gain); kept as --async experiment flag
     latch_throttle: bool = True   # half-rate detection while nailed down
+    hotkey: str = ""
     rt_probe: bool = False
     snap_dir: str = ""          # annotated frames every 5s (debug the model's eyes)
     burst: bool = True

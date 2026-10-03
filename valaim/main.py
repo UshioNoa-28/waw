@@ -131,6 +131,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
     return AimConfig(
         snap_dir=args.snap_dir,
         rt_probe=args.rt_probe,
+        hotkey=args.hotkey,
         model_path=resolve_model_path(args.model),
         model_info=resolve_model_path(args.model_info) if args.model_info else None,
         backend=args.backend,
@@ -636,6 +637,17 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 gate_note = f"游戏未在前台(当前:{fpname or '未知'})"
         active = active and in_game
         _nowp = time.monotonic()
+        try:
+            from . import hotkey as _hk
+            if _hk.pop():
+                snap_until = _nowp + 0.50
+                engine.reset()
+                _press_shot_until = _nowp + 0.34
+                _snap_session_until = _nowp + 0.50
+                _session_fired = False
+                print("[hotkey] snap+fire window open")
+        except Exception:
+            pass
         if bt_snap_events():
             snap_until = _nowp + 0.40
         snap_armed = _nowp < snap_until
@@ -662,7 +674,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             active = False
             gate_note = "锁定OFF - 手机按[锁定]恢复"
         bt_armed(bool(active))
-        target = selector.select(detections, cursor) if active else None
+        target = selector.select(detections, cursor, fov=850 if snap_armed else None) if active else None
         dist = None
         # nail = safe to fire: either fully latched, or already inside ~half a
         # head width (22px). Early-nail makes on-target clicks instant while
