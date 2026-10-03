@@ -121,6 +121,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--debug", action="store_true")
     p.add_argument("--snap-dir", default="", help="every 5s save annotated capture frame here (what the model actually sees)")
     p.add_argument("--rt-probe", action="store_true", help="measure TCP RTT via PING/PONG + BT mouse RTT via cursor poll")
+    p.add_argument("--infer-idle", action="store_true", help="skip inference while no click/session active (saves GPU, first stroke +25ms)")
+    p.add_argument("--hotkey", default="", help="global hotkey (f5-f10/scrolllock/pause) = snap+fire trigger; mouse stays on the PC")
+    p.add_argument("--key-probe", nargs="?", const="f8", default="", metavar="KEY", help="60s experiment: which key channels work while the game is focused")
     p.add_argument("--max-frames", type=int, default=0)
     p.add_argument("--game-process", default="VALORANT",
                    help="Only act while a foreground process with this name runs ('' disables the gate)")
@@ -947,7 +950,7 @@ def main() -> None:
         raise SystemExit(0)
     if args.key_probe:
         from .keyprobe import run_probe
-        run_probe(args.key_probe or "f8", seconds=args.max_frames or 60)
+        run_probe(args.key_probe or "f8")
         raise SystemExit(0)
     if args.calibrate_tool:
         from .calibrate import run_calibration
