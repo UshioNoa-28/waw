@@ -132,6 +132,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         snap_dir=args.snap_dir,
         rt_probe=args.rt_probe,
         hotkey=args.hotkey,
+        key_probe=args.key_probe,
         model_path=resolve_model_path(args.model),
         model_info=resolve_model_path(args.model_info) if args.model_info else None,
         backend=args.backend,
