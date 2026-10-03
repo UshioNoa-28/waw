@@ -327,6 +327,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         if (pending.size > 4096) pending.clear()
     }
 
+    @Volatile private var calibrating = false
     private val calSamples = ArrayList<ByteArray>()
 
     private fun dispatchReport(rep: ByteArray) {
