@@ -15,6 +15,7 @@ object MouseReport {
         0x05.toByte(), 0x01.toByte(),       // Usage Page (Generic Desktop)
         0x09.toByte(), 0x02.toByte(),       // Usage (Mouse)
         0xA1.toByte(), 0x01.toByte(),       // Collection (Application)
+        0x09.toByte(), 0x01.toByte(),       //   Usage (Pointer)
         0xA1.toByte(), 0x00.toByte(),       //   Collection (Physical)
         0x05.toByte(), 0x09.toByte(),       //     Usage Page (Button)
         0x19.toByte(), 0x01.toByte(),       //     Usage Minimum (1)
@@ -43,8 +44,7 @@ object MouseReport {
         0x81.toByte(), 0x06.toByte(),       //     Input (Data,Var,Rel)
         0xC0.toByte(),                      //   End Collection
         0xC0.toByte(),                      // End Collection
-
-    )    )
+    )
 
     const val BTN_LEFT = 0x01
     const val BTN_RIGHT = 0x02

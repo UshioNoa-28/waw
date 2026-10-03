@@ -45,18 +45,10 @@ class HidMouseController(
 
     @Volatile private var registered = false
     @Volatile private var connected = false
-    @Volatile private var vendorSeen = false
 
     val isReady: Boolean get() = connected
 
     private val callback = object : BluetoothHidDevice.Callback() {
-        override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {
-            if (id.toInt() == 1) {
-                if (!vendorSeen) { vendorSeen = true; CrashLog.log("hid: first SET_REPORT id1 from PC") }
-                BridgeGlobals.onVendorFrame?.invoke(data)
-            }
-        }
-
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
             when (state) {
@@ -95,7 +87,6 @@ class HidMouseController(
 
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, isRegistered: Boolean) {
             registered = isRegistered
-            CrashLog.log("hid: appStatus registered=$isRegistered")
             if (isRegistered) {
                 onState("HID registered")
                 // Registration is not connection: after the app was killed and
@@ -121,6 +112,8 @@ class HidMouseController(
             } catch (_: Exception) {
             }
         }
+
+        override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {}
 
         override fun onSetProtocol(device: BluetoothDevice, protocol: Byte) {}
 
@@ -281,7 +274,6 @@ class HidMouseController(
             )
             try {
                 val ok = hidDevice?.registerApp(sdp, null, QOS, APP_EXECUTOR, callback) ?: false
-                CrashLog.log("hid: registerApp ok=$ok descBytes=${MouseReport.DESCRIPTOR.size}")
                 if (!ok) onState("registerApp failed")
             } catch (e: SecurityException) {
                 onState("Permission denied: ${e.message}")
@@ -328,9 +320,6 @@ class HidMouseController(
         connected = false
         if (dev != null) adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, dev)
     }
-
-    @SuppressLint("MissingPermission")
-    fun sendVendor(frame: ByteArray): Boolean = false  // vendor channel shelved: keep proven mouse-only descriptor
 
     @SuppressLint("MissingPermission")
     fun sendReport(buttons: Int, dx: Int, dy: Int, wheel: Int): Boolean {

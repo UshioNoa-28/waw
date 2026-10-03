@@ -186,7 +186,6 @@ class MainActivity : AppCompatActivity() {
         // Start the keep-alive foreground service first: it puts the app in the
         // foreground state so the HID registration below survives the game
         // taking focus.
-        startKeepAlive()
 
         setStatus("Registering HID...")
         hid.register()
@@ -207,22 +206,11 @@ class MainActivity : AppCompatActivity() {
         setStatus("Started. Now pair \"BtAimBridge\" on the PC.")
     }
 
-    private fun startKeepAlive() {
-        val intent = Intent(this, KeepAliveService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-        else startService(intent)
-    }
-
-    private fun stopKeepAlive() {
-        stopService(Intent(this, KeepAliveService::class.java))
-    }
-
     private fun stopAll() {
         server?.stop()
         server = null
         hid.unregister()
         running = false
-        stopKeepAlive()
         btnToggle.text = "START"
         setStatus("Stopped")
     }

@@ -270,21 +270,6 @@ def bt_armed(on: bool) -> None:
             pass
 
 
-def bt_ping_hid() -> bool:
-    if _BT is not None:
-        try:
-            return bool(_BT.ping_hid())
-        except Exception:
-            return False
-    return False
-
-
-def bt_hid_stats() -> tuple[bool, float | None]:
-    if _BT is not None:
-        return (bool(getattr(_BT, "_hid_ready", False)), getattr(_BT, "_hid_rtt", None))
-    return (False, None)
-
-
 def bt_send_line(line: str) -> None:
     if _BT is not None:
         try:

@@ -19,8 +19,6 @@ from .input_ctrl import (
     bt_nail,
     bt_lmb_held,
     bt_send_line,
-    bt_ping_hid,
-    bt_hid_stats,
     bt_pop_ping_rtt,
     bt_armed,
     bt_snap_events,
@@ -123,7 +121,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--debug", action="store_true")
     p.add_argument("--snap-dir", default="", help="every 5s save annotated capture frame here (what the model actually sees)")
     p.add_argument("--rt-probe", action="store_true", help="measure TCP RTT via PING/PONG + BT mouse RTT via cursor poll")
-    p.add_argument("--infer-idle", action="store_true", help="skip inference while no click/session active (saves GPU, first stroke +25ms)")
     p.add_argument("--max-frames", type=int, default=0)
     p.add_argument("--game-process", default="VALORANT",
                    help="Only act while a foreground process with this name runs ('' disables the gate)")
@@ -134,7 +131,6 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
     return AimConfig(
         snap_dir=args.snap_dir,
         rt_probe=args.rt_probe,
-        infer_idle=args.infer_idle,
         model_path=resolve_model_path(args.model),
         model_info=resolve_model_path(args.model_info) if args.model_info else None,
         backend=args.backend,
@@ -519,7 +515,6 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
     _last_snap = 0.0
     _last_ping = 0.0
     _last_rt = 0.0
-    _rt_state: tuple[float, int, int] | None = None
     snap_until = 0.0         # phone big-button 'lock and fire' window
     _was_held = False
     _press_shot_until = 0.0
@@ -590,27 +585,17 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             detections, cursor = snap.detections, snap.cursor
             tick += 1
         else:
-            _idle = cfg.infer_idle and not (bt_lmb_held() or time.monotonic() < _snap_session_until)
             if cfg.latch_throttle and engine.is_latched and det_cache is not None and (tick % 2 == 0):
                 img, crop_x, crop_y, crop_w, crop_h, detections = det_cache
             else:
                 _tg = time.perf_counter()
                 img, crop_x, crop_y, crop_w, crop_h = capture.grab()
                 _ti = time.perf_counter()
-                if _idle:
-                    # nobody is clicking: stay blind-cheap. capture keeps dxcam
-                    # warm so the first inference after a press uses a 5ms-old
-                    # frame, not a stale one.
-                    detections = []
-                    grab_ms = (_ti - _tg) * 1000.0
-                    infer_ms = 0.0
-                    time.sleep(0.003)
-                else:
-                    detections = detector.detect(img, crop_x, crop_y)
-                    _te = time.perf_counter()
-                    grab_ms = (_ti - _tg) * 1000.0
-                    infer_ms = (_te - _ti) * 1000.0
-                    det_cache = (img, crop_x, crop_y, crop_w, crop_h, detections)
+                detections = detector.detect(img, crop_x, crop_y)
+                _te = time.perf_counter()
+                grab_ms = (_ti - _tg) * 1000.0
+                infer_ms = (_te - _ti) * 1000.0
+                det_cache = (img, crop_x, crop_y, crop_w, crop_h, detections)
             tick += 1
             cursor = capture.crosshair()
         if cfg.dump_dir and time.monotonic() - _dump_t >= _dump_next:
@@ -714,51 +699,30 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         if cfg.rt_probe and _nowp - _last_ping > 1.0:
             _last_ping = _nowp
             bt_send_line(f"PING {_nowp}")
-            bt_ping_hid()
             _rt = bt_pop_ping_rtt()
-            _hrdy, _hrt = bt_hid_stats()
-            if trace is not None:
-                if _rt is not None:
-                    trace.writerow(["ping", round(_nowp - t0, 4), round(_rt, 1)])
-                if _hrt is not None and _hrdy:
-                    trace.writerow(["pinghid", round(_nowp - t0, 4), round(_hrt, 1)])
-                    bt_hid_stats()
-                    _BTX = None
-                    try:
-                        from . import input_ctrl as _ic3
-                        if _ic3._BT is not None:
-                            _ic3._BT._hid_rtt = None
-                    except Exception:
-                        pass
+            if _rt is not None and trace is not None:
+                trace.writerow(["ping", round(_nowp - t0, 4), round(_rt, 1)])
                 trace_f.flush()
-        if cfg.rt_probe and _nowp - _last_rt > 8.0 and not in_game and _rt_state is None:
+        if cfg.rt_probe and _nowp - _last_rt > 8.0 and not in_game:
             _last_rt = _nowp
             try:
                 from .input_ctrl import get_cursor_pos
                 x0, y0 = get_cursor_pos()
                 move_mouse(40, 0)
-                _rt_state = (_nowp, x0, y0)
+                hit = None
+                _tp = time.monotonic()
+                while time.monotonic() - _tp < 0.5:
+                    x1, y1 = get_cursor_pos()
+                    if abs(x1 - x0) >= 15:
+                        hit = (time.monotonic() - _tp) * 1000.0
+                        break
+                    time.sleep(0.004)
+                move_mouse(-40, 0)
+                if trace is not None:
+                    trace.writerow(["rt", round(_nowp - t0, 4), round(hit, 1) if hit else -1])
+                    trace_f.flush()
             except Exception:
                 pass
-        if _rt_state is not None:
-            try:
-                from .input_ctrl import get_cursor_pos
-                _rp, _rx0, _ry0 = _rt_state
-                x1, y1 = get_cursor_pos()
-                if abs(x1 - _rx0) >= 15:
-                    if trace is not None:
-                        trace.writerow(["rt", round(_nowp - t0, 4), round((_nowp - _rp) * 1000.0, 1)])
-                        trace_f.flush()
-                    move_mouse(-40, 0)
-                    _rt_state = None
-                elif _nowp - _rp > 0.5:
-                    if trace is not None:
-                        trace.writerow(["rt", round(_nowp - t0, 4), -1])
-                        trace_f.flush()
-                    move_mouse(-40, 0)
-                    _rt_state = None
-            except Exception:
-                _rt_state = None
         _sd = cfg.snap_dir
         if _sd and _nowp - _last_snap > 5.0:
             _last_snap = _nowp

@@ -53,7 +53,6 @@ class AimConfig:
     async_pipeline: bool = False  # measured SLOWER (GIL contention, no GPU gain); kept as --async experiment flag
     latch_throttle: bool = True   # half-rate detection while nailed down
     rt_probe: bool = False
-    infer_idle: bool = False   # skip inference while idle (saves GPU, +25ms first stroke; default off = always warm)
     snap_dir: str = ""          # annotated frames every 5s (debug the model's eyes)
     burst: bool = True
     burst_cooldown: float = 0.28
