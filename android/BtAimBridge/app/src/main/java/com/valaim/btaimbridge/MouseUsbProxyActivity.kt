@@ -146,7 +146,6 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         }
     }
 
-    private fun Boolean.millisStillHeld(): Boolean = this
     private fun fireDown() {
         btnMask = btnMask or 0x01
         lmbDownSent = true
