@@ -46,6 +46,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--capture-anchor", default="crosshair", choices=["crosshair", "cursor"])
     p.add_argument("--crop", type=int, default=640)
     p.add_argument("--monitor", type=int, default=0)
+    p.add_argument("--no-hud-mask", dest="hud_mask", action="store_false", help="disable HUD black-out regions")
     p.add_argument("--team-guard", action="store_true", help="After latching, verify enemy via red crosshair pixels; ban non-enemy boxes briefly")
     p.add_argument("--min-head", type=float, default=10.0, help="Ignore targets with head-box narrower than this (px)")
     p.add_argument("--conf", type=float, default=0.4)

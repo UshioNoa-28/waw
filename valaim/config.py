@@ -52,6 +52,7 @@ class AimConfig:
     aim_comp: int = 4
     async_pipeline: bool = False  # measured SLOWER (GIL contention, no GPU gain); kept as --async experiment flag
     latch_throttle: bool = True   # half-rate detection while nailed down
+    hud_mask: bool = True
     hotkey: str = ""
     auto_burst: bool = False
     key_probe: str = ""
