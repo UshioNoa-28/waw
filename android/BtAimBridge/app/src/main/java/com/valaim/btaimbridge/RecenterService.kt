@@ -3,7 +3,7 @@ package com.valaim.btaimbridge
 import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
 import android.graphics.Path
-import android.view.GestureDescription
+import android.accessibilityservice.GestureDescription
 
 /** Warps the system pointer back to screen center when the BT mouse hits an edge. */
 class RecenterService : AccessibilityService() {
