@@ -189,7 +189,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         }
         if (mouse == null) { renderRaw("没找到 USB 鼠标(检查OTG/接口/换口)"); return }
         if (!usbManager.hasPermission(mouse)) {
-            val flags = if (android.os.Build.VERSION.SDK_INT >= 31) 0 else PendingIntent.FLAG_IMMUTABLE
+            val flags = PendingIntent.FLAG_IMMUTABLE
             usbManager.requestPermission(
                 mouse,
                 PendingIntent.getActivity(this, 0, Intent(this, javaClass::class.java), flags),
