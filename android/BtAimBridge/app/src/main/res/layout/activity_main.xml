@@ -89,6 +89,12 @@
             android:text="锁定: ON (点这里开关)" />
 
         <Button
+            android:id="@+id/btnMouseUsb"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="无边界模式 (USB直读鼠标)" />
+
+        <Button
             android:id="@+id/btnMouseProxy"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -73,7 +73,12 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "无法打开蓝牙设置", Toast.LENGTH_SHORT).show()
             }
         }
-        findViewById<Button>(R.id.btnMouseProxy).setOnClickListener {
+                findViewById<Button>(R.id.btnMouseUsb).setOnClickListener {
+            try { startActivity(android.content.Intent(this, MouseUsbProxyActivity::class.java)) }
+            catch (e: Exception) { setStatus("打开USB代理失败: ${'$'}{e.message}") }
+        }
+
+findViewById<Button>(R.id.btnMouseProxy).setOnClickListener {
             try { startActivity(android.content.Intent(this, MouseProxyActivity::class.java)) }
             catch (e: Exception) { setStatus("打开代理页失败: ${e.javaClass.simpleName} ${e.message}") }
         }
