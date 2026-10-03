@@ -5,7 +5,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.hardware.usb.*
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
+import android.hardware.usb.UsbInterface
+import android.hardware.usb.UsbManager
+import android.hardware.usb.UsbRequest
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,12 +19,12 @@ import androidx.appcompat.app.AppCompatActivity
 import java.nio.ByteBuffer
 
 /**
- * USB raw mouse proxy: claim the mouse, read its interrupt-IN reports via
- * UsbRequest (per spec for INT endpoints), split the byte stream by the
- * report length derived from the HID Report Descriptor, and forward motion
- * + gated LMB through our BT HID to the PC. No system pointer involved ->
- * no screen-edge limits. Heuristic variance calibration remains as fallback
- * if the descriptor route ever fails.
+ * USB raw mouse proxy (v2, spec-reviewed):
+ *  - claim the HID interface, read INTERRUPT-IN via UsbRequest (cancellable)
+ *  - report length/field bits come from the HID Report Descriptor;
+ *    variance calibration remains only as a fallback
+ *  - stream accumulator splits multi-report transfers correctly
+ *  - LMB gate keeps the never-swallow semantics of the relay page
  */
 class MouseUsbProxyActivity : AppCompatActivity() {
 
@@ -26,24 +32,27 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     private var conn: UsbDeviceConnection? = null
     private var claimed: UsbInterface? = null
     private var deviceName: String = ""
-    private var polling = false
+    @Volatile private var polling = false
     private val handler = Handler(Looper.getMainLooper())
 
-    // ---- layout (from descriptor or heuristic) ----
-    private var reportLen = 0
-    private var xBit = -1; private var yBit = -1; private var wheelBit = -1
-    private var btnBase = -1; private var btnCount = 0
+    private var reportLen = 4
     private var reportIdLen = 0
-    private var layoutSrc = ""
+    private var xBit = 8
+    private var yBit = 16
+    private var wheelBit = 24
+    private var btnBase = 0
+    private var btnCount = 5
+    private var layoutSrc = "未接管"
 
-    // ---- stream accumulator ----
     private val pending = ArrayList<Byte>(4096)
 
-    // ---- forwarding state ----
-    @Volatile var pendX = 0; @Volatile var pendY = 0; @Volatile var pendWheel = 0
+    @Volatile private var pendX = 0
+    @Volatile private var pendY = 0
+    @Volatile private var pendWheel = 0
     private var btnMask: Int
         get() = BridgeGlobals.btnMask
         set(v) { BridgeGlobals.btnMask = v }
+
     @Volatile private var lastDownAt = 0L
     @Volatile private var lmbHeld = false
     @Volatile private var lmbDownSent = false
@@ -56,42 +65,61 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     private var nails = 0
     private var holds = 0
 
+    @Volatile private var totalReports = 0L
+    private var reportsPerSec = "?"
+    private var rpWindowAt = 0L
+    private var rpBase = 0L
+
     private val out = android.widget.TextView(this)
 
-    private val renderTick = object : Runnable {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+        val start = android.widget.Button(this).apply { text = "开始接管鼠标(USB直读,无边界)" }
+        start.setOnClickListener { takeOver() }
+        val rel = android.widget.Button(this).apply { text = "释放鼠标(还给系统)" }
+        rel.setOnClickListener { release() }
+        val back = android.widget.Button(this).apply { text = "退回中转模式" }
+        back.setOnClickListener {
+            startActivity(android.content.Intent(this@MouseUsbProxyActivity, MouseProxyActivity::class.java))
+        }
+        out.textSize = 13f
+        val pad = (resources.displayMetrics.density * 12).toInt()
+        out.setPadding(pad, pad, pad, pad)
+        val col = android.widget.LinearLayout(this)
+        col.orientation = android.widget.LinearLayout.VERTICAL
+        val lp = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
+        col.addView(start, lp); col.addView(rel, lp); col.addView(back, lp); col.addView(out, lp)
+        val sc = android.widget.ScrollView(this)
+        sc.addView(col)
+        setContentView(sc)
+        CrashLog.log("USB proxy v2 onCreate")
+        renderStatus()
+        handler.postDelayed(tick, 4)
+    }
+
+    private fun clickReport(mask: Int) {
+        val h = BridgeGlobals.hid ?: return
+        h.sendReport(mask, 1, 0, 0)
+        h.sendReport(mask, -1, 0, 0)
+    }
+
+    private val tick = object : Runnable {
         override fun run() {
             val h = BridgeGlobals.hid
             if (h != null) {
                 val assist = BridgeGlobals.server?.assistOn == true
                 if ((lmbHeld || lmbWantsRelease || lmbPhysUp) && !lmbDownSent) {
+                    val nailed = BridgeGlobals.server?.nailOk == true
+                    val expired = System.currentTimeMillis() - pressAt > graceMs
                     if (!assist) {
-                        btnMask = btnMask or 0x01
-                        lmbDownSent = true; lastDownAt = System.currentTimeMillis()
-                        clickReport(btnMask)
-                        if (lmbWantsRelease || lmbPhysUp) {
-                            lmbHeld = false; lmbWantsRelease = false; lmbPhysUp = false
-                            handler.postDelayed({
-                                val up = btnMask and 1.inv()
-                    btnMask = up
-                                clickReport(up)
-                            }, 60)
-                        }
-                    } else {
-                        val nailed = BridgeGlobals.server?.nailOk == true
-                        if (nailed || System.currentTimeMillis() - pressAt > graceMs) {
-                            if (nailed) nails++ else holds++
-                            btnMask = btnMask or 0x01
-                        lmbDownSent = true; lastDownAt = System.currentTimeMillis()
-                            clickReport(btnMask)
-                            if (lmbWantsRelease || lmbPhysUp) {
-                                lmbHeld = false; lmbWantsRelease = false; lmbPhysUp = false
-                                handler.postDelayed({
-                                    val up = btnMask and 1.inv()
-                    btnMask = up
-                                    clickReport(up)
-                                }, 60)
-                            }
-                        }
+                        fireDown()
+                    } else if (nailed) {
+                        nails++; fireDown()
+                    } else if (expired) {
+                        holds++; fireDown()
                     }
                 }
                 while (pendX != 0 || pendY != 0) {
@@ -105,8 +133,10 @@ class MouseUsbProxyActivity : AppCompatActivity() {
                     pendWheel -= cw
                     h.sendReport(btnMask, 0, 0, cw)
                 }
-                if ((btnMask and 0x01) != 0 && !lmbHeld && System.currentTimeMillis() - lastDownAt > 2000) {
-                    btnMask = btnMask and 1.inv()                    lmbDownSent = false
+                if ((btnMask and 0x01) != 0 && !lmbHeld && !lmbWantsRelease && !lmbPhysUp &&
+                    lmbDownSent && System.currentTimeMillis() - lastDownAt > 2000) {
+                    btnMask = btnMask and 1.inv()
+                    lmbDownSent = false
                     clickReport(btnMask)
                     CrashLog.log("usb phantom LMB cleared")
                 }
@@ -116,37 +146,34 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         }
     }
 
-    private fun clickReport(mask: Int) {
-        val h = BridgeGlobals.hid ?: return
-        h.sendReport(mask, 1, 0, 0)
-        h.sendReport(mask, -1, 0, 0)
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_mouse_test)
-        usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-        findViewById<android.widget.Button>(R.id.btnStart).text = "开始接管鼠标(USB直读)"
-        findViewById<android.widget.Button>(R.id.btnStart).setOnClickListener { takeOver() }
-        findViewById<android.widget.Button>(R.id.btnStop).text = "释放鼠标(还给系统)"
-        findViewById<android.widget.Button>(R.id.btnStop).setOnClickListener { release() }
-        CrashLog.log("USB proxy onCreate")
-        renderStatus()
-        handler.postDelayed(renderTick, 4)
-    }
-
-    private fun renderStatus() {
-        val extra = "\n---- 诊断 ----\n" + CrashLog.tail(3)
-        out.text = buildString {
-            appendLine(if (polling) "USB 直读运行中 [$layoutSrc]" else "未接管")
-            appendLine("移动转发 $moves 帧 | 钉住放 $nails / 超时放 $holds")
-            appendLine("左键: ${if (lmbHeld) if (lmbDownSent) "已放行" else "扣住等待钉住…" else "-"} 辅助:${BridgeGlobals.server?.assistOn}")
-            appendLine("报文 $totalReports 条/秒 ~$reportsPerSec")
-            append(extra)
+    private fun Boolean.millisStillHeld(): Boolean = this
+    private fun fireDown() {
+        btnMask = btnMask or 0x01
+        lmbDownSent = true
+        lastDownAt = System.currentTimeMillis()
+        clickReport(btnMask)
+        if (lmbWantsRelease || lmbPhysUp || !lmbHeld) {
+            lmbHeld = false; lmbWantsRelease = false; lmbPhysUp = false
+            handler.postDelayed({
+                val up = btnMask and 1.inv()
+                btnMask = up
+                clickReport(up)
+            }, 60)
         }
     }
 
-    // ---------------- takeover ----------------
+    private fun renderStatus() {
+        out.text = buildString {
+            appendLine(if (polling) "USB 直读运行中 [$layoutSrc]" else "未接管")
+            appendLine("移动转发 $moves 帧 | 钉住放 $nails / 超时放 $holds")
+            appendLine("左键: ${if (lmbHeld) if (lmbDownSent) "已放行" else "扣住…" else "-"} 辅助:${BridgeGlobals.server?.assistOn}")
+            appendLine("报文 $totalReports (~$reportsPerSec/s)")
+            appendLine("---- 诊断 ----")
+            append(CrashLog.tail(3))
+        }
+    }
+
+    // ---------- takeover ----------
 
     private fun takeOver() {
         val mouse = usbManager.deviceList.values.firstOrNull { dev ->
@@ -174,51 +201,50 @@ class MouseUsbProxyActivity : AppCompatActivity() {
 
     private fun openAndRun(mouse: UsbDevice) {
         try {
-            CrashLog.log("usb step: openDevice ${mouse.deviceName}")
+            CrashLog.log("usb step: openDevice")
             val c = usbManager.openDevice(mouse) ?: run { renderRaw("openDevice 失败"); return }
             conn = c
             deviceName = mouse.deviceName
             var targetIntf: UsbInterface? = null
             var ep: UsbEndpoint? = null
-            for (k in 0 until mouse.interfaceCount) {
+            outer@ for (k in 0 until mouse.interfaceCount) {
                 val it = mouse.getInterface(k)
                 if (it.interfaceClass == UsbConstants.USB_CLASS_HID) {
                     for (e in 0 until it.endpointCount) {
                         val a = it.getEndpoint(e)
                         if (a.type == UsbConstants.USB_ENDPOINT_XFER_INT && a.direction == UsbConstants.USB_DIR_IN) {
-                            targetIntf = it; ep = a; break
+                            targetIntf = it; ep = a; break@outer
                         }
                     }
                 }
-                if (targetIntf != null) break
             }
             if (targetIntf == null || ep == null) { renderRaw("无 HID INT-IN 端点"); return }
             CrashLog.log("usb step: claimInterface(force)")
             if (!c.claimInterface(targetIntf, true)) { renderRaw("claimInterface 被拒"); return }
             claimed = targetIntf
-            CrashLog.log("usb step: claimed ok ep maxPkt=${ep.maxPacketSize}")
+            CrashLog.log("usb step: claimed ok, maxPkt=${ep.maxPacketSize}")
 
-            // ---- descriptor-driven layout ----
             val layouts = tryReadDescriptor(c, targetIntf)
-            if (layouts != null && layouts.isNotEmpty()) {
-                val l = layouts.values.maxByOrNull { it.wireLen }!!
+            val l = layouts?.values?.filter { it.xBit >= 0 && it.yBit >= 0 }?.maxByOrNull { it.wireLen }
+            if (l != null) {
                 reportLen = l.wireLen
                 reportIdLen = if (l.id != 0) 8 else 0
                 xBit = l.xBit; yBit = l.yBit; wheelBit = l.wheelBit
-                btnBase = l.btnBase; btnCount = l.btnCount
-                layoutSrc = "描述符 id${l.id} len${reportLen}B x@${xBit} y@${yBit}"
-                CrashLog.log("usb layout from descriptor: $layoutSrc")
+                btnBase = if (l.btnBase >= 0) l.btnBase else 0
+                btnCount = if (l.btnCount > 0) l.btnCount else 5
+                layoutSrc = "描述符 id${l.id} ${l.wireLen}B"
+                CrashLog.log("usb layout: $layoutSrc x@$xBit y@$yBit btn@$btnBase")
             } else {
-                layoutSrc = "校准中(晃鼠标)"
-                heuristicDone = false
-                reportLen = 4; xBit = 8; yBit = 16; wheelBit = 24; btnBase = 0
-                CrashLog.log("usb descriptor parse failed -> heuristic fallback")
+                reportLen = 4; reportIdLen = 0; xBit = 8; yBit = 16; wheelBit = 24; btnBase = 0
+                layoutSrc = "校准模式(请晃鼠标)"
+                CrashLog.log("usb: descriptor unavailable -> calibration mode")
             }
+            calSamples.clear()
 
             polling = true
             startRequestLoop(c, ep)
             registerDetach()
-            renderRaw("USB 鼠标已接管(直读,无边界)")
+            renderRaw("已接管:$layoutSrc")
         } catch (e: Exception) {
             CrashLog.log("usb init crash: ${e.javaClass.name}: ${e.message}")
             renderRaw("初始化失败: ${e.message}")
@@ -228,49 +254,30 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     private fun tryReadDescriptor(c: UsbDeviceConnection, it: UsbInterface): Map<Int, HidLayout>? {
         return try {
             val raw = c.rawDescriptors ?: return null
-            // walk to our interface's HID class descriptor (0x21) -> wDescriptorLength at +7
             var off = 0
-            var inIntf = -1
             var wantLen = -1
-            var idx = 0
             while (off + 2 <= raw.size) {
                 val len = raw[off].toInt() and 0xFF
                 val type = raw[off + 1].toInt() and 0xFF
                 if (len <= 0) break
-                when (type) {
-                    0x04 -> { inIntf = raw[off + 3].toInt() and 0xFF }
-                    0x21 -> {
-                        if (len >= 9) {
-                            wantLen = ((raw[off + 8].toInt() and 0xFF) shl 8) or (raw[off + 7].toInt() and 0xFF)
-                        }
-                    }
+                if (type == 0x21 && len >= 9) {
+                    wantLen = ((raw[off + 8].toInt() and 0xFF) shl 8) or (raw[off + 7].toInt() and 0xFF)
                 }
                 off += len
-                idx++
             }
             if (wantLen <= 0 || wantLen > 4096) return null
             val buf = ByteArray(wantLen)
-            val got = c.controlTransfer(
-                0xA1, // DIR_IN | TYPE_CLASS | RECIP_INTERFACE
-                0x06, 0x2200, it.id, buf, buf.size, 500,
-            )
+            val got = c.controlTransfer(0xA1 /* IN|CLASS|INTERFACE */, 0x06, 0x2200, it.id, buf, buf.size, 500)
             CrashLog.log("usb step: GET_REPORT_DESCRIPTOR want=$wantLen got=$got")
             if (got <= 0) return null
-            val map = HidReportParser.parse(buf.copyOf(got))
-            map.values.firstOrNull { it.xBit >= 0 && it.yBit >= 0 }?.let { return map }
-            map
+            HidReportParser.parse(buf.copyOf(got))
         } catch (e: Exception) {
             CrashLog.log("usb descriptor err: ${e.message}")
             null
         }
     }
 
-    // ---------------- USB request loop ----------------
-
-    @Volatile private var totalReports = 0L
-    private var reportsPerSec = "?"
-    private var rpWindowAt = 0L
-    private var rpBase = 0L
+    // ---------- read loop ----------
 
     private fun startRequestLoop(c: UsbDeviceConnection, ep: UsbEndpoint) {
         Thread {
@@ -278,7 +285,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
                 val req = UsbRequest()
                 if (!req.initialize(c, ep)) { runOnUiThread { renderRaw("UsbRequest.initialize 失败") }; return@Thread }
                 val buf = ByteBuffer.allocateDirect(ep.maxPacketSize.coerceAtLeast(64))
-                CrashLog.log("usb step: entering UsbRequest loop")
+                CrashLog.log("usb step: UsbRequest loop start")
                 while (polling) {
                     buf.clear()
                     if (!req.queue(buf)) break
@@ -287,81 +294,82 @@ class MouseUsbProxyActivity : AppCompatActivity() {
                         buf.flip()
                         val n = buf.remaining()
                         if (n > 0) {
-                            val chunk = ByteArray(n); buf.get(chunk)
+                            val chunk = ByteArray(n)
+                            buf.get(chunk)
                             feedBytes(chunk)
                         }
                     }
                 }
-                CrashLog.log("usb step: loop exited (detach or error)")
+                CrashLog.log("usb step: loop exit")
             } catch (e: Exception) {
                 CrashLog.log("usb loop crash: ${e.message}")
             }
-            runOnUiThread { polling = false; renderRaw("读取停止(拔线或错误),点释放再接管") }
+            runOnUiThread { polling = false; renderRaw("读取停止(拔线/错误) - 可点释放再接管") }
         }.start()
     }
 
     private fun feedBytes(data: ByteArray) {
-        var i = 0
-        while (i < data.size) {
-            val n = pending.size
-            pending.add(data[i]); i++
-            if (n + 1 >= reportLen && reportLen > 0) {
+        for (b in data) {
+            pending.add(b)
+            if (pending.size >= reportLen) {
                 val rep = ByteArray(reportLen)
                 for (k in 0 until reportLen) rep[k] = pending[k]
-                for (k in 0 until reportLen) pending.removeAt(0)
+                repeat(reportLen) { pending.removeAt(0) }
                 dispatchReport(rep)
-                if (pending.size > 2048) { pending.clear() } // resync on drift
             }
         }
+        if (pending.size > 4096) pending.clear()
     }
+
+    private val calSamples = ArrayList<ByteArray>()
 
     private fun dispatchReport(rep: ByteArray) {
         totalReports++
-        if (totalReports - rpBase > 50) {
+        if (rpWindowAt == 0L) { rpWindowAt = System.currentTimeMillis(); rpBase = totalReports }
+        else if (totalReports - rpBase > 200) {
             val now = System.currentTimeMillis()
-            if (rpWindowAt == 0L) { rpWindowAt = now; rpBase = totalReports }
-            else if (now - rpWindowAt > 1000) {
-                reportsPerSec = ((totalReports - rpBase) * 1000 / (now - rpWindowAt)).toString()
-                rpWindowAt = now; rpBase = totalReports
+            reportsPerSec = ((totalReports - rpBase) * 1000 / (now - rpWindowAt)).toString()
+            rpWindowAt = now; rpBase = totalReports
+        }
+        if (layoutSrc.startsWith("校准")) {
+            calSamples.add(rep.copyOf())
+            if (calSamples.size >= 40) runCalibration()
+        }
+        val dx = HidReportParser.sfield(rep, xBit - reportIdLen, 8)
+        val dy = HidReportParser.sfield(rep, yBit - reportIdLen, 8)
+        val wh = if (wheelBit >= 0) HidReportParser.sfield(rep, wheelBit - reportIdLen, 8) else 0
+        var btns = 0
+        if (btnBase >= 0) {
+            for (k in 0 until btnCount.coerceAtMost(5)) {
+                val bit = btnBase - reportIdLen + k
+                if (bit in 0 until rep.size * 8) {
+                    btns = btns or (((rep[bit / 8].toInt() shr (bit % 8)) and 1) shl k)
+                }
             }
         }
-        if (!heuristicDone) maybeCalibrate(rep)
-        val dx = if (xBit >= 0) HidReportParser.sfield(rep, xBit - reportIdLen, 8) else 0
-        val dy = if (yBit >= 0) HidReportParser.sfield(rep, yBit - reportIdLen, 8) else 0
-        val wh = if (wheelBit >= 0) HidReportParser.sfield(rep, wheelBit - reportIdLen, 8) else 0
-        val btns = readButtons(rep)
         if (dx != 0 || dy != 0) { pendX += dx; pendY += dy; moves++ }
         if (wh != 0) pendWheel += wh
-        // LMB edge (gated)
         val left = btns and 0x01 != 0
-        val was = lastBtn and 0x01 != 0
-        if (left && !was) onPhysPress()
-        if (!left && was) onPhysRelease()
-        // non-LMB buttons forward immediately
+        val wasLeft = lastBtn and 0x01 != 0
+        if (left && !wasLeft) onPhysPress()
+        if (!left && wasLeft) onPhysRelease()
         val others = btns and 0x01.inv()
-        if (others != (lastBtn and 0x01.inv())) {
-            btnMask = (btnMask and 0x01.inv()) or others            clickReport(btnMask)
+        val prevOthers = lastBtn and 0x01.inv()
+        if (others != prevOthers) {
+            btnMask = (btnMask and 0x01.inv()) or others
+            clickReport(btnMask)
         }
         lastBtn = btns
     }
 
-    private fun readButtons(rep: ByteArray): Int {
-        if (btnBase < 0) return 0
-        var v = 0
-        for (k in 0 until btnCount.coerceAtMost(5)) {
-            val bit = btnBase - reportIdLen + k
-            if (bit < rep.size * 8) v = v or (((rep[bit / 8].toInt() shr (bit % 8)) and 1) shl k)
-        }
-        return v
-    }
-
-    // ---- gate plumbing (same semantics as relay page) ----
     private fun onPhysPress() {
         if (!lmbHeld && (lmbWantsRelease || lmbPhysUp) && !lmbDownSent) {
-            btnMask = btnMask or 0x01            clickReport(btnMask)
+            // second tap while first still gated: flush first as plain click
+            btnMask = btnMask or 0x01
+            clickReport(btnMask)
             handler.postDelayed({
                 val up = btnMask and 1.inv()
-                    btnMask = up
+                btnMask = up
                 clickReport(up)
             }, 60)
             lmbWantsRelease = false; lmbPhysUp = false
@@ -377,64 +385,60 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         BridgeGlobals.server?.sendLmb(false)
         if (lmbDownSent) {
             lmbDownSent = false
-            btnMask = btnMask and 1.inv()            clickReport(btnMask)
+            btnMask = btnMask and 1.inv()
+            clickReport(btnMask)
         } else {
             lmbWantsRelease = true
         }
     }
 
-    // ---- heuristic fallback (unchanged idea, applied on stride-resolved reports) ----
-    @Volatile private var heuristicDone = true
-    private val calSamples = ArrayList<ByteArray>()
-    private fun maybeCalibrate(rep: ByteArray) {
-        if (layoutSrc.startsWith("描述符")) return
-        calSamples.add(rep.copyOf())
-        if (calSamples.size >= 40) {
-            runCalibration()
-        }
-    }
-
     private fun runCalibration() {
-        val len = calSamples[0].size
+        val len = calSamples.firstOrNull()?.size ?: return
         val score = DoubleArray(len)
         for (b in 0 until len) {
-            var mx = 0.0
-            for (s0 in calSamples) mx += s0[b]
-            mx /= calSamples.size
+            var mean = 0.0
+            for (s0 in calSamples) mean += s0[b]
+            mean /= calSamples.size
             var v = 0.0
-            for (s0 in calSamples) { val d = s0[b] - mx; v += d * d }
+            for (s0 in calSamples) { val d = s0[b] - mean; v += d * d }
             score[b] = v
         }
-        val order = score.indices.sortedByDescending { score[it] }
-        val hot = order.take(2).sorted()
+        val hot = score.indices.sortedByDescending { score[it] }.take(2).sorted()
         if (hot.size == 2) {
             xBit = hot[0] * 8 + reportIdLen
             yBit = hot[1] * 8 + reportIdLen
             btnBase = ((hot[0] - 1).coerceAtLeast(0)) * 8 + reportIdLen
             btnCount = 8
             layoutSrc = "校准 dx@${hot[0]} dy@${hot[1]}"
-            heuristicDone = true
             CrashLog.log("usb calibrated: $layoutSrc")
         }
     }
 
-    // ---- lifecycle ----
+    // ---------- lifecycle ----------
+
     private var detachRc: BroadcastReceiver? = null
     private fun registerDetach() {
         if (detachRc != null) return
         val rc = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == UsbManager.ACTION_USB_DEVICE_DETACHED) {
+                    @Suppress("DEPRECATION")
                     val dev = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
                     if (dev?.deviceName == deviceName) {
-                        CrashLog.log("usb detached broadcast")
+                        CrashLog.log("usb detached")
                         polling = false
                         release()
                     }
                 }
             }
         }
-        registerReceiver(rc, IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED))
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(rc, IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED), Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(rc, IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED))
+            }
+        } catch (_: Exception) {}
         detachRc = rc
     }
 
@@ -444,13 +448,16 @@ class MouseUsbProxyActivity : AppCompatActivity() {
         try { conn?.close() } catch (_: Exception) {}
         conn = null; claimed = null
         pending.clear()
-        renderRaw("已释放,鼠标回到手机系统")
+        renderRaw("已释放,鼠标回手机系统")
     }
 
-    private fun renderRaw(s: String) { CrashLog.log("usb: $s"); handler.post { renderStatus() } }
+    private fun renderRaw(s: String) {
+        CrashLog.log("usb: $s")
+        handler.post { renderStatus() }
+    }
 
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
+        handler.removeCallbacks(tick)
         polling = false
         release()
         super.onDestroy()
