@@ -123,6 +123,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--rt-probe", action="store_true", help="measure TCP RTT via PING/PONG + BT mouse RTT via cursor poll")
     p.add_argument("--infer-idle", action="store_true", help="skip inference while no click/session active (saves GPU, first stroke +25ms)")
     p.add_argument("--hotkey", default="", help="global hotkey (f5-f10/scrolllock/pause) = snap+fire trigger; mouse stays on the PC")
+    p.add_argument("--auto-burst", action="store_true", help="burst engine fires on its own when calm (no click gate): one stroke, landing-confirm, silence until drift")
     p.add_argument("--key-probe", nargs="?", const="f8", default="", metavar="KEY", help="60s experiment: which key channels work while the game is focused")
     p.add_argument("--max-frames", type=int, default=0)
     p.add_argument("--game-process", default="VALORANT",
@@ -135,6 +136,7 @@ def config_from_args(args: argparse.Namespace) -> AimConfig:
         snap_dir=args.snap_dir,
         rt_probe=args.rt_probe,
         hotkey=args.hotkey,
+        auto_burst=args.auto_burst,
         key_probe=args.key_probe,
         model_path=resolve_model_path(args.model),
         model_info=resolve_model_path(args.model_info) if args.model_info else None,
@@ -825,7 +827,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                         camx = sorted(v[0] for v in vecs)[len(vecs) // 2]
                         camy = sorted(v[1] for v in vecs)[len(vecs) // 2]
                 _prev_heads = cur_h
-                _aim_gate = held_eff if cfg.burst else True
+                _aim_gate = True if (not cfg.burst or cfg.auto_burst) else held_eff
                 mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy), force=_nowp < _press_shot_until) if (dist > cfg.min_move and _aim_gate) else (0, 0)
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
