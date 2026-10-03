@@ -50,7 +50,12 @@ REM [1/2] Python environment
 REM ==================================================
 echo [1/2] Preparing Python environment...
 
-if exist ".venv\Scripts\python.exe" goto :venv_ready
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" -m pip --version >nul 2>&1
+    if not errorlevel 1 goto :venv_ready
+    echo [warn] broken venv (no pip) - recreating...
+    rmdir /s /q ".venv"
+)
 
 echo Creating .venv...
 where py >nul 2>&1
