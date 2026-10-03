@@ -238,6 +238,7 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             } else {
                 reportLen = 4; reportIdLen = 0; xBit = 8; yBit = 16; wheelBit = 24; btnBase = 0
                 layoutSrc = "校准模式(请晃鼠标)"
+                calibrating = true
                 CrashLog.log("usb: descriptor unavailable -> calibration mode")
             }
             calSamples.clear()
@@ -295,6 +296,10 @@ class MouseUsbProxyActivity : AppCompatActivity() {
                         buf.flip()
                         val n = buf.remaining()
                         if (n > 0) {
+                            if (calibrating && n in 4..64) {
+                                reportLen = n
+                                CrashLog.log("usb stride from transfer: $n")
+                            }
                             val chunk = ByteArray(n)
                             buf.get(chunk)
                             feedBytes(chunk)
@@ -332,17 +337,18 @@ class MouseUsbProxyActivity : AppCompatActivity() {
             reportsPerSec = ((totalReports - rpBase) * 1000 / (now - rpWindowAt)).toString()
             rpWindowAt = now; rpBase = totalReports
         }
-        if (layoutSrc.startsWith("校准")) {
+        if (calibrating) {
             calSamples.add(rep.copyOf())
             if (calSamples.size >= 40) runCalibration()
+            return
         }
-        val dx = HidReportParser.sfield(rep, xBit - reportIdLen, 8)
-        val dy = HidReportParser.sfield(rep, yBit - reportIdLen, 8)
-        val wh = if (wheelBit >= 0) HidReportParser.sfield(rep, wheelBit - reportIdLen, 8) else 0
+        val dx = HidReportParser.sfield(rep, xBit, 8)
+        val dy = HidReportParser.sfield(rep, yBit, 8)
+        val wh = if (wheelBit >= 0) HidReportParser.sfield(rep, wheelBit, 8) else 0
         var btns = 0
         if (btnBase >= 0) {
             for (k in 0 until btnCount.coerceAtMost(5)) {
-                val bit = btnBase - reportIdLen + k
+                val bit = btnBase + k
                 if (bit in 0 until rep.size * 8) {
                     btns = btns or (((rep[bit / 8].toInt() shr (bit % 8)) and 1) shl k)
                 }
@@ -394,23 +400,47 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     }
 
     private fun runCalibration() {
-        val len = calSamples.firstOrNull()?.size ?: return
+        calibrating = false
+        val samples = calSamples
+        calSamples.clear()
+        val len = samples.firstOrNull()?.size ?: return
+        // constant bytes are report IDs / fixed padding, never motion
+        val constant = BooleanArray(len)
+        for (b in 0 until len) {
+            val first = samples[0][b]
+            constant[b] = samples.all { it[b] == first }
+        }
+        if (constant[0] && (samples[0][0].toInt() and 0xFF) in 1..8) {
+            reportIdLen = 8
+            reportLen = len
+        }
         val score = DoubleArray(len)
         for (b in 0 until len) {
+            if (constant[b]) { score[b] = -1.0; continue }
             var mean = 0.0
-            for (s0 in calSamples) mean += s0[b]
-            mean /= calSamples.size
+            for (s0 in samples) mean += s0[b]
+            mean /= samples.size
             var v = 0.0
-            for (s0 in calSamples) { val d = s0[b] - mean; v += d * d }
+            for (s0 in samples) { val d = s0[b] - mean; v += d * d }
             score[b] = v
         }
-        val hot = score.indices.sortedByDescending { score[it] }.take(2).sorted()
-        if (hot.size == 2) {
-            xBit = hot[0] * 8 + reportIdLen
-            yBit = hot[1] * 8 + reportIdLen
-            btnBase = ((hot[0] - 1).coerceAtLeast(0)) * 8 + reportIdLen
+        val hot = score.indices.filter { !constant[it] }.sortedByDescending { score[it] }.take(2).sorted()
+        if (hot.size >= 2) {
+            xBit = hot[0] * 8
+            yBit = hot[1] * 8
+            wheelBit = -1
+            // buttons: among non-constant bytes that are NOT motion, pick the one
+            // whose values stay within 0..7 (button mask range)
+            val btnCand = score.indices.filter { it !in hot && !constant[it] && samples.all { x -> (x[0].toInt() and 0xFF) in 0..0 } }
+            btnBase = if (hot[0] >= 1) (hot[0] - 1) * 8 else 0
+            var btnByte = -1
+            for (b in 0 until len) {
+                if (b in hot) continue
+                if (samples.all { (it[b].toInt() and 0xF8) == 0 }) { btnByte = b; break }
+            }
+            if (btnByte >= 0) btnBase = btnByte * 8
             btnCount = 8
-            layoutSrc = "校准 dx@${hot[0]} dy@${hot[1]}"
+            layoutSrc = "校准 id:$reportIdLen dx@${hot[0]} dy@${hot[1]} btn@$btnBase"
             CrashLog.log("usb calibrated: $layoutSrc")
         }
     }
