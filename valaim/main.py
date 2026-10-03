@@ -825,7 +825,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                         camx = sorted(v[0] for v in vecs)[len(vecs) // 2]
                         camy = sorted(v[1] for v in vecs)[len(vecs) // 2]
                 _prev_heads = cur_h
-                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy), force=_nowp < _press_shot_until) if (dist > cfg.min_move and held_eff) else (0, 0)
+                _aim_gate = held_eff if cfg.burst else True
+                mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy), force=_nowp < _press_shot_until) if (dist > cfg.min_move and _aim_gate) else (0, 0)
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
                     trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3], 1 if held else 0)
