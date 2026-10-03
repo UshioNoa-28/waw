@@ -803,7 +803,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             # every frame, so id() never matches).
             nowt = time.monotonic()
             same = (vel.get("t", 0.0) and nowt - vel["t"] < 0.4
-                    and math.hypot(target.x - vel["x"], target.y - vel["y"]) < 30)
+                    and math.hypot(target.x - vel["x"], target.y - vel["y"])
+                        < 30.0 + 400.0 * max(0.0, nowt - vel["t"]))
             if not same:
                 vel.update(x=target.x, y=target.y, t=nowt, vx=0.0, vy=0.0)
                 engine.on_new_lock()
