@@ -72,7 +72,9 @@ class DxcamCapture:
                 # access-lost loops) must NEVER feed stale frames to the aim
                 # loop - downgrade instead.
                 self._starve += 1
-                if self._starve > 6 or self._last is None:
+                # a static desktop simply has no new frames - reuse the last one.
+                # only a long, unbroken freeze is a real duplication death.
+                if self._starve > 60 or self._last is None:
                     raise TimeoutError("duplication starved")
             else:
                 self._starve = 0

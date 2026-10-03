@@ -1,5 +1,6 @@
 import argparse
 import json
+import numpy as _np
 import math
 import random
 import os
@@ -378,6 +379,16 @@ def _new_capture(cfg: AimConfig):
         except Exception as exc:
             print(f"[capture] dxcam unavailable ({exc.__class__.__name__}: {exc}); using mss")
     return base
+
+
+def _scoreboard_up(img) -> bool:
+    # VALORANT's scoreboard is a near-white full-screen wash; agent portraits
+    # there read as heads to the detector. Cheap downsampled brightness test.
+    try:
+        small = img[::16, ::16].astype(_np.uint16)
+        return float((small.sum(axis=2) > 690).mean()) > 0.22
+    except Exception:
+        return False
 
 
 def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
@@ -832,6 +843,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 _prev_heads = cur_h
                 _aim_gate = True if (not cfg.burst or cfg.auto_burst) else held_eff
                 mx, my = engine.step(dx, dy, lx, ly, dw, (camx, camy), force=_nowp < _press_shot_until) if (dist > cfg.min_move and _aim_gate) else (0, 0)
+                if (mx or my) and _scoreboard_up(img):
+                    mx = my = 0
                 _gd = getattr(engine, "_gate_dbg", None)
                 if _gd is not None:
                     trace_g = (round(time.monotonic() - t0, 4), round(_gd[0], 1), _gd[1], round(_gd[2], 3), _gd[3], 1 if held else 0)
