@@ -70,10 +70,11 @@ class MouseUsbProxyActivity : AppCompatActivity() {
     private var rpWindowAt = 0L
     private var rpBase = 0L
 
-    private val out = android.widget.TextView(this)
+    private lateinit var out: android.widget.TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        out = android.widget.TextView(this)
         usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
         val start = android.widget.Button(this).apply { text = "开始接管鼠标(USB直读,无边界)" }
         start.setOnClickListener { takeOver() }
