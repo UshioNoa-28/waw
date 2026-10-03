@@ -945,6 +945,10 @@ def main() -> None:
     if args.input_probe:
         input_probe_loop()
         raise SystemExit(0)
+    if args.key_probe:
+        from .keyprobe import run_probe
+        run_probe(args.key_probe or "f8", seconds=args.max_frames or 60)
+        raise SystemExit(0)
     if args.calibrate_tool:
         from .calibrate import run_calibration
 
