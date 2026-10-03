@@ -42,6 +42,7 @@ class AimParams:
     settle_px: float = 45.0       # absolute fallback when box width unknown
     settle_frac: float = 1.6      # settle threshold = frac * head-box width (scale-invariant)
     burst_early: bool = True      # fire the next stroke as soon as the last one is SEEN to land (instead of waiting the full cooldown)
+    settle_age_only: bool = False # auto-burst: drop the calm requirement (live play never sits still)
     arrive_px: float = 8.0        # lock OFF the output inside this radius (0=off)
     resume_px: float = 32.0       # ...and only resume past this (above spike band)
     med_win: int = 1              # median filter width on raw error (1=off)
@@ -236,7 +237,7 @@ class AimEngine:
             if p.settle_frac > 0 and box_w > 0:
                 thr = max(15.0, p.settle_frac * box_w)
             calm = drift < max(thr, 20.0)
-            settled = force or (self._lock_at is not None and nowb - self._lock_at >= p.settle_ms / 1000.0 and calm)
+            settled = force or (self._lock_at is not None and nowb - self._lock_at >= p.settle_ms / 1000.0 and (calm or p.settle_age_only))
             if not settled:
                 self._bacc = []
 
