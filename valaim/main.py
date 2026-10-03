@@ -567,6 +567,8 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
             capture.crop_size = cfg.crop_size  # hot resize capture square
         engine.p.burst = cfg.burst
         engine.p.settle_age_only = bool(cfg.auto_burst)
+        if cfg.auto_burst:
+            engine.p.settle_ms = 0.0
         engine.p.burst_cooldown = cfg.burst_cooldown
         engine.p.burst_gain = cfg.burst_gain
         engine.p.settle_ms = cfg.settle_ms
