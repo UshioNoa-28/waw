@@ -19,7 +19,7 @@ def run() -> None:
     _ensure_streams()
     argv = sys.argv[1:]
 
-    _CLI_FLAGS = ("--cli", "--calibrate-tool", "--bt-test")
+    _CLI_FLAGS = ("--cli", "--calibrate-tool", "--bt-test", "--key-probe", "--input-probe", "--calibrate")
     if any(a in argv for a in _CLI_FLAGS):
         argv = [a for a in argv if a != "--cli"]
         if not any(a == "--input-backend" or a.startswith("--input-backend=") for a in argv):
