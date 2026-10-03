@@ -225,8 +225,12 @@ class BtBridge:
         last_tx = time.monotonic()
         while self._running:
             with self._cond:
-                while self._running and not self._dirty and time.monotonic() - last_tx <= 3.0:
-                    self._cond.wait(timeout=0.4)
+                # 0.25s keepalive: WiFi chips sleep after ~0.5s idle and the
+                # wake tax is 60-100ms per packet (measured: first TCP connect
+                # 81ms, warmed connects 4-14ms). A trickle of traffic keeps
+                # both NICs in active mode -> command latency drops to real LAN.
+                while self._running and not self._dirty and time.monotonic() - last_tx <= 0.25:
+                    self._cond.wait(timeout=0.05)
                 if not self._running:
                     return
                 sock = self._sock
