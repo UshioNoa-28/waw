@@ -69,7 +69,7 @@ class HidMouseController(
                     // The host may remember a stuck button state from a last
                     // session that ended abruptly; clear it immediately.
                     try {
-                        hidDevice?.sendReport(device, 2, MouseReport.build(0, 0, 0, 0))
+                        hidDevice?.sendReport(device, 0, MouseReport.build(0, 0, 0, 0))
                     } catch (_: SecurityException) {
                     }
                 }
@@ -115,11 +115,8 @@ class HidMouseController(
         @SuppressLint("MissingPermission")
         override fun onGetReport(device: BluetoothDevice, type: Byte, id: Byte, bufferSize: Int) {
             try {
-                val payload = when {
-                type == BluetoothHidDevice.REPORT_TYPE_INPUT && id == 2.toByte() -> MouseReport.build(0, 0, 0, 0)
-                type == BluetoothHidDevice.REPORT_TYPE_INPUT && id == 1.toByte() -> ByteArray(8)
-                else -> ByteArray(0)
-            }
+                val payload = if (type == BluetoothHidDevice.REPORT_TYPE_INPUT && id == 0.toByte())
+                    MouseReport.build(0, 0, 0, 0) else ByteArray(0)
                 hidDevice?.replyReport(device, type, id, payload)
             } catch (_: Exception) {
             }
@@ -333,18 +330,14 @@ class HidMouseController(
     }
 
     @SuppressLint("MissingPermission")
-    fun sendVendor(frame: ByteArray): Boolean {
-        val dev = hostDevice ?: return false
-        val f = if (frame.size >= 8) frame.copyOfRange(0, 8) else frame.copyOf(8)
-        return try { hidDevice?.sendReport(dev, 1, f) ?: false } catch (_: SecurityException) { false }
-    }
+    fun sendVendor(frame: ByteArray): Boolean = false  // vendor channel shelved: keep proven mouse-only descriptor
 
     @SuppressLint("MissingPermission")
     fun sendReport(buttons: Int, dx: Int, dy: Int, wheel: Int): Boolean {
         val dev = hostDevice ?: return false
         val report = MouseReport.build(buttons, dx, dy, wheel)
         return try {
-            hidDevice?.sendReport(dev, 2, report) ?: false
+            hidDevice?.sendReport(dev, 0, report) ?: false
         } catch (_: SecurityException) {
             false
         }

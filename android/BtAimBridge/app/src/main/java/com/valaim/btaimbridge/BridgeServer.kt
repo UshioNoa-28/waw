@@ -77,12 +77,10 @@ class BridgeServer(
     fun sendLmb(on: Boolean) {
         val l = if (on) "L1" else "L0"
         sendAsync(l + "\n")
-        vendorSendLine(l)
     }
 
     fun sendTrigger() {
         sendAsync("T\n")
-        vendorSendLine("T")
     }
 
     // PC->phone binary frames: [op, p1, p2, p3, p4, p5, p6, p7]
@@ -103,7 +101,7 @@ class BridgeServer(
 
     fun start() {
         if (running) return
-        BridgeGlobals.onVendorFrame = { handleVendorFrame(it) }
+        
         running = true
         worker = thread(name = "bridge-server") { loop() }
         drainThread = thread(name = "bridge-drain") { drainLoop() }
