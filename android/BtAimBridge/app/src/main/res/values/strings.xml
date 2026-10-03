@@ -2,3 +2,4 @@
 <resources>
     <string name="app_name">BtAimBridge</string>
 </resources>
+<string name="recenter_desc">光标撞边自动回中(鼠标代理防边界)</string>

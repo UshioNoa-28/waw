@@ -41,6 +41,8 @@ class MouseProxyActivity : AppCompatActivity() {
     private var moves = 0
     private var holds = 0
     private var nails = 0
+    private var warps = 0
+    private var recenterHint = false
 
     override fun onUserLeaveHint() { super.onUserLeaveHint() }
 
@@ -48,6 +50,11 @@ class MouseProxyActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         out = TextView(this).apply { textSize = 14f; setPadding(32, 48, 32, 32); isFocusableInTouchMode = true; requestFocus() }
         setContentView(out)
+        out.setOnLongClickListener {
+            try { startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            catch (_: Exception) {}
+            true
+        }
                 handler.post(tick)
     }
 
@@ -141,6 +148,8 @@ class MouseProxyActivity : AppCompatActivity() {
             appendLine("左键状态: ${if (lmbHeld) if (lmbDownSent) "已放行" else "扣住等待钉住…" else "无"}")
             appendLine("PC 辅助: ${if (BridgeGlobals.server?.assistOn == true) "就绪(扣左键等吸附)" else "未开(左键直通)"} 钉住: ${BridgeGlobals.server?.nailOk}")
             append("移动即时转发,左键最多等 ${graceMs}ms")
+            appendLine()
+            append(if (RecenterService.isOn()) "回中服务: 开(已回中 $warps 次)" else "回中服务: 未开启 → 去系统设置-无障碍启用 BtAimBridge")
         }
     }
 
@@ -156,6 +165,18 @@ class MouseProxyActivity : AppCompatActivity() {
                 lastX = x; lastY = y
                 if (kotlin.math.abs(dx) < 400 && kotlin.math.abs(dy) < 400 && (dx != 0 || dy != 0)) {
                     pendX += dx; pendY += dy; moves++
+                }
+                // edge hit: warp system pointer home so deltas never clamp at 0
+                val sw = out.width.toFloat(); val sh = out.height.toFloat()
+                if (sw > 0 && (x <= 1f || y <= 1f || x >= sw - 1f || y >= sh - 1f)) {
+                    if (RecenterService.isOn()) {
+                        if (RecenterService.warp(x.coerceIn(4f, sw - 4f), y.coerceIn(4f, sh - 4f), sw / 2f, sh / 2f)) {
+                            warps++
+                            lastX = -1f; lastY = -1f
+                        }
+                    } else if (!recenterHint) {
+                        recenterHint = true
+                    }
                 }
             }
             MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> {

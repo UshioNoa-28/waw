@@ -41,6 +41,19 @@
             android:exported="false"
             android:configChanges="keyboard|keyboardHidden|navigation|uiMode|orientation|screenSize|screenLayout|smallestScreenSize" />
         <service
+            android:name=".RecenterService"
+            android:exported="false"
+            android:label="AimBridge 回中"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/recenter_config" />
+        </service>
+
+        <service
             android:name=".BridgeForegroundService"
             android:foregroundServiceType="connectedDevice" />
     </application>
