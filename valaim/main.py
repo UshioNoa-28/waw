@@ -647,7 +647,7 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
                 trace_f.flush()
             if held:
                 engine.reset()
-                _press_shot_until = _nowp + 0.20
+                _press_shot_until = _nowp + 0.34
                 _snap_session_until = _nowp + 0.5
                 _session_fired = False
         _was_held = held
@@ -672,7 +672,10 @@ def run(cfg: AimConfig, stop_flag=None, status=None) -> None:
         # resetting the timer (that made the phone wait the full 450ms)
         _sess_age = _nowp - (_snap_session_until - 0.5)
         _bail = held_eff and not _session_fired and _sess_age > 0.12
-        _nl = bool(getattr(engine, "is_latched", False)) or (target is not None and dist is not None and dist <= 22.0) or _bail
+        # session hard cap: whatever happened, release the shot by 340ms -
+        # a stroke was fired at press and a correction one after cooldown.
+        _bail2 = held_eff and _sess_age > 0.34
+        _nl = bool(getattr(engine, "is_latched", False)) or (target is not None and dist is not None and dist <= 22.0) or _bail or _bail2
         if _nl != nail_state:
             nail_state = _nl
             bt_nail(_nl)
